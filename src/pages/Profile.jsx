@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { User, Key, Shield } from "lucide-react";
+import { User, Key, Shield, Phone, Mail, FileText, CheckCircle, Clock } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
+import { motion } from "framer-motion";
 
 function Profile() {
   const { user: authUser, updateProfileState } = useAuth();
@@ -59,7 +60,6 @@ function Profile() {
       const response = await api.put("/users/me", profileForm);
       setProfileSuccess("Profile updated successfully!");
       updateProfileState(response.data);
-      // Reload stats
       fetchProfile();
     } catch (err) {
       console.error("Profile update failed", err);
@@ -108,188 +108,179 @@ function Profile() {
   };
 
   if (loading) {
-    return <div className="profile-container"><p>Loading profile...</p></div>;
+    return (
+      <div style={{
+        textAlign: "center",
+        padding: "80px 40px",
+        background: "var(--glass-bg)",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--glass-border)",
+        color: "var(--text-secondary)"
+      }}>
+        Loading profile configuration...
+      </div>
+    );
   }
 
   return (
-    <div className="profile-container">
-      {/* Profile Overview */}
+    <motion.div 
+      className="profile-container" 
+      style={{ padding: 0, width: "100%" }}
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 80, damping: 15 }}
+    >
+      {/* Profile Overview Card */}
       <div className="profile-card" style={{ marginBottom: "30px" }}>
-        <h1 style={{ display: "flex", alignItems: "center", gap: "12px", borderBottom: "none", marginBottom: 0 }}>
-          <User size={32} color="var(--primary)" /> User Account Profile
-        </h1>
-        <hr />
+        <h2>
+          <User size={22} color="var(--primary)" style={{ filter: "drop-shadow(0 0 6px var(--primary-glow))" }} /> 
+          <span>Citizen Identity Profile</span>
+        </h2>
+        <hr style={{ border: 0, height: "1px", background: "var(--border-color)", margin: "20px 0" }} />
         
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "10px" }}>
-          <div>
-            <h3><strong>Name:</strong> {profile?.name}</h3>
-            <h3><strong>Email:</strong> {profile?.email}</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
+              <User size={16} /> <strong>Name:</strong> {profile?.name}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
+              <Mail size={16} /> <strong>Email:</strong> {profile?.email}
+            </div>
           </div>
-          <div>
-            <h3><strong>Phone:</strong> {profile?.phone}</h3>
-            <h3><strong>Account Role:</strong> <span style={{ color: "var(--primary)", fontWeight: "600" }}>{profile?.role?.replace("ROLE_", "")}</span></h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
+              <Phone size={16} /> <strong>Phone:</strong> {profile?.phone}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
+              <Shield size={16} /> <strong>Role:</strong> <span style={{ color: "var(--accent)", fontWeight: "600" }}>{profile?.role?.replace("ROLE_", "")}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Profile Stats */}
-      <div className="profile-stats" style={{ marginBottom: "50px" }}>
-        <div className="stat-box">
-          <h2>{profile?.totalComplaints || 0}</h2>
-          <p>Total Complaints</p>
+      {/* Profile Activity Metrics */}
+      <div className="stats-container" style={{ marginBottom: "40px" }}>
+        <div className="stat-card" style={{ padding: "20px" }}>
+          <div className="stat-card-icon" style={{ background: "var(--primary-light)", color: "var(--primary)" }}>
+            <FileText size={20} />
+          </div>
+          <div className="stat-card-info">
+            <h2>{profile?.totalComplaints || 0}</h2>
+            <p>Total Submissions</p>
+          </div>
         </div>
 
-        <div className="stat-box">
-          <h2>{profile?.pendingComplaints || 0}</h2>
-          <p>Pending Review</p>
+        <div className="stat-card" style={{ padding: "20px" }}>
+          <div className="stat-card-icon" style={{ background: "var(--warning-light)", color: "var(--warning)" }}>
+            <Clock size={20} />
+          </div>
+          <div className="stat-card-info">
+            <h2>{profile?.pendingComplaints || 0}</h2>
+            <p>Pending Audits</p>
+          </div>
         </div>
 
-        <div className="stat-box">
-          <h2>{profile?.resolvedComplaints || 0}</h2>
-          <p>Resolved</p>
+        <div className="stat-card" style={{ padding: "20px" }}>
+          <div className="stat-card-icon" style={{ background: "var(--success-light)", color: "var(--success)" }}>
+            <CheckCircle size={20} />
+          </div>
+          <div className="stat-card-info">
+            <h2>{profile?.resolvedComplaints || 0}</h2>
+            <p>Resolved Cases</p>
+          </div>
         </div>
       </div>
 
-      {/* Editing section */}
-      <div style={{ display: "flex", gap: "40px", flexWrap: "wrap" }}>
-        {/* Update details */}
-        <div className="profile-card" style={{ flex: 1, minWidth: "320px", marginBottom: 0 }}>
-          <h2 style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "1.4rem", fontWeight: "700", marginBottom: "20px" }}>
-            <Shield size={22} color="var(--primary)" /> Update Information
+      {/* Editing Dual Columns */}
+      <div className="profile-grid">
+        {/* Info Update */}
+        <div className="profile-card">
+          <h2>
+            <Shield size={20} color="var(--accent)" /> <span>Update Information</span>
           </h2>
-          <hr />
+          <hr style={{ border: 0, height: "1px", background: "var(--border-color)", margin: "15px 0" }} />
 
-          {profileError && <p style={{ color: "#c62828", marginBottom: "15px", fontWeight: "500" }}>{profileError}</p>}
-          {profileSuccess && <p style={{ color: "#137333", marginBottom: "15px", fontWeight: "600" }}>{profileSuccess}</p>}
+          {profileError && <div className="alert-error" style={{ marginBottom: "15px" }}>{profileError}</div>}
+          {profileSuccess && <div className="alert-success" style={{ marginBottom: "15px" }}>{profileSuccess}</div>}
 
           <form onSubmit={handleProfileUpdate}>
-            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Full Name</label>
-            <input
-              type="text"
-              value={profileForm.name}
-              onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                marginTop: "6px",
-                marginBottom: "20px",
-                border: "1px solid var(--border-color)",
-                borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)"
-              }}
-            />
+            <div className="form-group">
+              <label>Full Name</label>
+              <input
+                type="text"
+                value={profileForm.name}
+                onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                required
+              />
+            </div>
 
-            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Phone Number</label>
-            <input
-              type="text"
-              value={profileForm.phone}
-              onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                marginTop: "6px",
-                marginBottom: "25px",
-                border: "1px solid var(--border-color)",
-                borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)"
-              }}
-            />
+            <div className="form-group">
+              <label>Phone Number</label>
+              <input
+                type="text"
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                required
+              />
+            </div>
 
-            <button type="submit" style={{
-              width: "100%",
-              padding: "12px",
-              background: "var(--primary)",
-              color: "white",
-              border: "none",
-              borderRadius: "var(--radius-sm)",
-              fontWeight: "600",
-              cursor: "pointer",
-              transition: "var(--transition)"
-            }}>
-              Update Profile
+            <button type="submit" style={{ width: "100%", marginTop: "10px" }}>
+              Save Details
             </button>
           </form>
         </div>
 
-        {/* Change password */}
-        <div className="profile-card" style={{ flex: 1, minWidth: "320px", marginBottom: 0 }}>
-          <h2 style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "1.4rem", fontWeight: "700", marginBottom: "20px" }}>
-            <Key size={22} color="var(--primary)" /> Change Password
+        {/* Password Update */}
+        <div className="profile-card">
+          <h2>
+            <Key size={20} color="var(--primary)" /> <span>Change Password</span>
           </h2>
-          <hr />
+          <hr style={{ border: 0, height: "1px", background: "var(--border-color)", margin: "15px 0" }} />
 
-          {passError && <p style={{ color: "#c62828", marginBottom: "15px", fontWeight: "500" }}>{passError}</p>}
-          {passSuccess && <p style={{ color: "#137333", marginBottom: "15px", fontWeight: "600" }}>{passSuccess}</p>}
+          {passError && <div className="alert-error" style={{ marginBottom: "15px" }}>{passError}</div>}
+          {passSuccess && <div className="alert-success" style={{ marginBottom: "15px" }}>{passSuccess}</div>}
 
           <form onSubmit={handlePasswordChange}>
-            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Current Password</label>
-            <input
-              type="password"
-              placeholder="Enter current password"
-              value={passwordForm.currentPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                marginTop: "6px",
-                marginBottom: "15px",
-                border: "1px solid var(--border-color)",
-                borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)"
-              }}
-            />
+            <div className="form-group">
+              <label>Current Password</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                required
+              />
+            </div>
 
-            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>New Password</label>
-            <input
-              type="password"
-              placeholder="Enter new password (min 8 chars)"
-              value={passwordForm.newPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                marginTop: "6px",
-                marginBottom: "15px",
-                border: "1px solid var(--border-color)",
-                borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)"
-              }}
-            />
+            <div className="form-group">
+              <label>New Password</label>
+              <input
+                type="password"
+                placeholder="Min. 8 characters"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                required
+              />
+            </div>
 
-            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Confirm New Password</label>
-            <input
-              type="password"
-              placeholder="Confirm new password"
-              value={passwordForm.confirmPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                marginTop: "6px",
-                marginBottom: "25px",
-                border: "1px solid var(--border-color)",
-                borderRadius: "var(--radius-sm)",
-                background: "var(--bg-primary)"
-              }}
-            />
+            <div className="form-group">
+              <label>Confirm New Password</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                required
+              />
+            </div>
 
-            <button type="submit" disabled={passLoading} style={{
-              width: "100%",
-              padding: "12px",
-              background: "var(--primary)",
-              color: "white",
-              border: "none",
-              borderRadius: "var(--radius-sm)",
-              fontWeight: "600",
-              cursor: "pointer",
-              transition: "var(--transition)"
-            }}>
-              {passLoading ? "Updating..." : "Change Password"}
+            <button type="submit" disabled={passLoading} style={{ width: "100%", marginTop: "10px" }}>
+              {passLoading ? "Updating Key..." : "Establish New Key"}
             </button>
           </form>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

@@ -1,417 +1,752 @@
-import { useEffect, useState } from "react";
-import { Users, FileText, AlertCircle, CheckCircle, Trash2, Eye, Download, FilePlus } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { 
+  Users, FileText, AlertCircle, CheckCircle, ShieldAlert, BarChart3, 
+  Download, RefreshCw, LogOut, ChevronRight, Activity, Calendar, Play, Pause, Loader2 
+} from "lucide-react";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
+import { useSocket } from "../context/SocketContext";
+import { motion, AnimatePresence } from "framer-motion";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
+import * as XLSX from "xlsx";
+
+// Modular Sub-components
+import AdminSearchFilters from "../components/AdminSearchFilters";
+import AdminAnalyticsCharts from "../components/AdminAnalyticsCharts";
+import AdminComplaintsTable from "../components/AdminComplaintsTable";
+
+const CATEGORIES = ["Phishing", "Online Fraud", "Identity Theft", "Social Media Crime", "Cyber Bullying", "Financial Fraud"];
+const STATUSES = ["SUBMITTED", "UNDER_REVIEW", "INVESTIGATING", "RESOLVED", "REJECTED"];
 
 function AdminDashboard() {
+  const { user } = useAuth();
+  const { socket } = useSocket();
+  const navigate = useNavigate();
+
   const [complaints, setComplaints] = useState([]);
+  const [officers, setOfficers] = useState([]);
   const [stats, setStats] = useState(null);
+  
+  // Advanced Analytics states
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [categoryData, setCategoryData] = useState([]);
+  const [statusData, setStatusData] = useState([]);
+  const [heatmapData, setHeatmapData] = useState([]);
+  const [hotspotData, setHotspotData] = useState([]);
+  
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [selectedComplaint, setSelectedComplaint] = useState(null);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterPriority, setFilterPriority] = useState("");
 
-  useEffect(() => {
-    fetchAdminData();
-  }, []);
+  // Filters & Controls
+  const [dateFilter, setDateFilter] = useState("1y");
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [filters, setFilters] = useState({
+    complaintId: "",
+    userName: "",
+    status: "",
+    category: "",
+    startDate: "",
+    endDate: ""
+  });
 
-  const fetchAdminData = async () => {
+  // Fetch Stats & Charts Analytics
+  const fetchStatsAndAnalytics = useCallback(async (filterVal = dateFilter, isSilent = false) => {
+    if (!isSilent) setRefreshing(true);
+    try {
+      const [
+        statsRes,
+        monthlyRes,
+        categoryRes,
+        statusRes,
+        heatmapRes,
+        hotspotRes
+      ] = await Promise.all([
+        api.get("/admin/stats"),
+        api.get(`/analytics/monthly?filter=${filterVal}`),
+        api.get(`/analytics/category?filter=${filterVal}`),
+        api.get(`/analytics/status?filter=${filterVal}`),
+        api.get(`/analytics/heatmap?filter=${filterVal}`),
+        api.get(`/analytics/hotspots?filter=${filterVal}`)
+      ]);
+
+      setStats(statsRes.data);
+      setMonthlyData(monthlyRes.data);
+      setCategoryData(categoryRes.data);
+      setStatusData(statusRes.data);
+      setHeatmapData(heatmapRes.data);
+      setHotspotData(hotspotRes.data);
+    } catch (err) {
+      console.error("Failed to load SOC analytics logs", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [dateFilter]);
+
+  // Fetch core static registries
+  const fetchRegistries = async () => {
     setLoading(true);
     try {
-      const statsResponse = await api.get("/complaints/admin/stats");
-      setStats(statsResponse.data);
-
-      const listResponse = await api.get("/complaints");
-      setComplaints(listResponse.data);
+      const [listRes, officersRes] = await Promise.all([
+        api.get("/complaints"),
+        api.get("/admin/officers")
+      ]);
+      setComplaints(listRes.data);
+      setOfficers(officersRes.data);
     } catch (err) {
-      console.error("Failed to load admin stats/list", err);
-      setError("Unauthorized or server connection error.");
+      console.error("Failed to load registrations or officer rosters", err);
+      setError("Forbidden access or server connection error.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStatusChange = async (id, newStatus) => {
-    try {
-      await api.put(`/complaints/${id}`, { status: newStatus });
-      alert("Status updated successfully!");
-      if (selectedComplaint && selectedComplaint.id === id) {
-        setSelectedComplaint(prev => ({ ...prev, status: newStatus }));
+  useEffect(() => {
+    fetchRegistries();
+    fetchStatsAndAnalytics(dateFilter, false);
+  }, [dateFilter]);
+
+  // Real-time synchronization using Socket.IO
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on("complaint_submitted", (newComplaint) => {
+      setComplaints((prev) => [newComplaint, ...prev]);
+      fetchStatsAndAnalytics(dateFilter, true);
+    });
+
+    socket.on("complaint_updated", (updatedComplaint) => {
+      setComplaints((prev) => prev.map((c) => (c.id === updatedComplaint.id ? updatedComplaint : c)));
+      if (selectedComplaint && selectedComplaint.id === updatedComplaint.id) {
+        setSelectedComplaint(updatedComplaint);
       }
-      fetchAdminData();
-    } catch (err) {
-      console.error("Failed to update status", err);
-      alert("Failed to update status.");
-    }
-  };
+      fetchStatsAndAnalytics(dateFilter, true);
+    });
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to permanently delete this complaint?")) {
-      return;
-    }
-
-    try {
-      await api.delete(`/complaints/${id}`);
-      alert("Complaint deleted successfully!");
+    socket.on("complaint_deleted", ({ id }) => {
+      setComplaints((prev) => prev.filter((c) => c.id !== id));
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint(null);
       }
-      fetchAdminData();
+      fetchStatsAndAnalytics(dateFilter, true);
+    });
+
+    return () => {
+      socket.off("complaint_submitted");
+      socket.off("complaint_updated");
+      socket.off("complaint_deleted");
+    };
+  }, [socket, dateFilter, fetchStatsAndAnalytics, selectedComplaint]);
+
+  // Fallback Polling interval (10 seconds)
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(() => {
+      fetchStatsAndAnalytics(dateFilter, true);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, dateFilter, fetchStatsAndAnalytics]);
+
+  // Update complaint status
+  const handleStatusChange = async (id, newStatus) => {
+    try {
+      await api.put(`/complaints/${id}`, { status: newStatus });
     } catch (err) {
-      console.error("Failed to delete complaint", err);
-      alert("Failed to delete complaint.");
+      console.error("Failed to update status", err);
+      alert("Failed to update case status.");
     }
   };
 
+  // Resolve complaint (direct resolution)
+  const handleResolve = async (id) => {
+    await handleStatusChange(id, "RESOLVED");
+  };
+
+  // Delete complaint
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to permanently delete this incident record from SOC logs?")) {
+      return;
+    }
+    try {
+      await api.delete(`/complaints/${id}`);
+    } catch (err) {
+      console.error("Failed to delete complaint", err);
+      alert("Failed to delete complaint record.");
+    }
+  };
+
+  // Assign complaint to officer
+  const handleAssign = async (id, officerId) => {
+    try {
+      await api.put(`/admin/complaints/${id}/assign`, { officerId });
+    } catch (err) {
+      console.error("Failed to assign officer", err);
+      alert("Failed to assign case officer.");
+    }
+  };
+
+  // Filters Handler
+  const handleFilterChange = (key, value) => {
+    if (key === "reset") {
+      setFilters({
+        complaintId: "",
+        userName: "",
+        status: "",
+        category: "",
+        startDate: "",
+        endDate: ""
+      });
+    } else {
+      setFilters(prev => ({ ...prev, [key]: value }));
+    }
+  };
+
+  // Filter complaints client-side based on filter settings
   const filteredComplaints = complaints.filter(c => {
-    return (filterStatus === "" || c.status === filterStatus) &&
-           (filterPriority === "" || c.priority === filterPriority);
+    const matchesId = !filters.complaintId || c.complaintId.toLowerCase().includes(filters.complaintId.toLowerCase());
+    const matchesUser = !filters.userName || (c.user?.name && c.user.name.toLowerCase().includes(filters.userName.toLowerCase()));
+    const matchesStatus = !filters.status || c.status === filters.status;
+    const matchesCategory = !filters.category || c.category === filters.category;
+    
+    let matchesDate = true;
+    if (filters.startDate) {
+      matchesDate = matchesDate && new Date(c.createdAt) >= new Date(filters.startDate + "T00:00:00");
+    }
+    if (filters.endDate) {
+      matchesDate = matchesDate && new Date(c.createdAt) <= new Date(filters.endDate + "T23:59:59");
+    }
+
+    return matchesId && matchesUser && matchesStatus && matchesCategory && matchesDate;
   });
 
+  // Export to PDF
+  const handleExportPDF = async () => {
+    const element = document.getElementById("soc-dashboard-visualizer");
+    if (!element) return;
+    try {
+      // Temporarily hide filter inputs and action buttons in captured canvas image
+      const controlElements = document.querySelectorAll(".no-print");
+      controlElements.forEach(el => el.style.display = "none");
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#030307"
+      });
+
+      controlElements.forEach(el => el.style.display = "flex");
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save("sentinel-soc-dashboard-snapshot.pdf");
+    } catch (err) {
+      console.error("Failed to generate PDF report", err);
+      alert("Error generating PDF. Please verify and try again.");
+    }
+  };
+
+  // Export to Excel sheet
+  const handleExportExcel = () => {
+    const sheetData = filteredComplaints.map(c => ({
+      "Tracking ID": c.complaintId,
+      "Reporter Name": c.user?.name || "Citizen",
+      "Reporter Email": c.user?.email || "N/A",
+      "Reporter Phone": c.user?.phone || "N/A",
+      "Category": c.category,
+      "Priority": c.priority,
+      "Assigned Officer": c.officer?.name || "Unassigned",
+      "Status": c.status.replace("_", " "),
+      "Incident Date": c.incidentDate,
+      "Location": c.location || "Delhi",
+      "Date Filed": new Date(c.createdAt).toLocaleDateString(),
+      "Description": c.description || ""
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SOC Complaint Logs");
+    XLSX.writeFile(wb, "sentinel-soc-complaints-registry.xlsx");
+  };
+
   if (loading) {
-    return <div className="dashboard"><p>Loading Admin Dashboard...</p></div>;
+    return (
+      <div style={{
+        textAlign: "center",
+        padding: "80px 40px",
+        background: "var(--glass-bg)",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--glass-border)",
+        color: "var(--text-secondary)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "15px"
+      }}>
+        <Loader2 size={36} className="spin-animation" style={{ animation: "spin 1s linear infinite", color: "var(--accent)" }} />
+        <span>Initializing Security Operations Center (SOC) Terminal...</span>
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="dashboard" style={{ textAlign: "center", padding: "60px" }}>
-        <h2 style={{ color: "#dc2626" }}>Access Denied</h2>
-        <p style={{ marginTop: "10px", color: "var(--text-secondary)" }}>{error}</p>
+      <div style={{ textAlign: "center", padding: "60px 20px" }}>
+        <h2 style={{ color: "var(--danger)", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+          <ShieldAlert size={28} /> Access Denied
+        </h2>
+        <p style={{ marginTop: "15px", color: "var(--text-secondary)" }}>{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="dashboard" style={{ maxWidth: "1400px" }}>
-      <h1>Admin Command Center</h1>
-      <p style={{ marginBottom: "40px" }}>Review citizen submissions, update status, and audit evidence files.</p>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      style={{ width: "100%" }}
+      id="soc-dashboard-visualizer"
+    >
+      {/* Analytics controls bar */}
+      <div className="no-print" style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: "25px",
+        flexWrap: "wrap",
+        gap: "15px",
+        background: "rgba(3, 3, 7, 0.6)",
+        padding: "14px 20px",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--glass-border)",
+        boxShadow: "0 4px 15px rgba(0,0,0,0.3)"
+      }}>
+        
+        {/* Date Filters */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Calendar size={16} color="var(--text-secondary)" />
+          <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Audit Window:</span>
+          <div style={{ display: "flex", gap: "6px" }}>
+            {[
+              { label: "7D", value: "7d" },
+              { label: "30D", value: "30d" },
+              { label: "1Y", value: "1y" }
+            ].map((btn) => (
+              <button
+                key={btn.value}
+                onClick={() => setDateFilter(btn.value)}
+                style={{
+                  border: "none",
+                  padding: "5px 12px",
+                  borderRadius: "4px",
+                  fontSize: "0.75rem",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  background: dateFilter === btn.value ? "var(--primary-light)" : "transparent",
+                  color: dateFilter === btn.value ? "var(--primary)" : "var(--text-secondary)",
+                  border: dateFilter === btn.value ? "1px solid rgba(139, 92, 246, 0.4)" : "1px solid transparent",
+                  transition: "var(--transition)"
+                }}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Global Controls & Exporters */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          
+          {/* Auto Refresh Toggle */}
+          <button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            style={{
+              border: "none",
+              padding: "7px 12px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.75rem",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: autoRefresh ? "rgba(16, 185, 129, 0.08)" : "rgba(255, 255, 255, 0.02)",
+              color: autoRefresh ? "var(--success)" : "var(--text-secondary)",
+              border: autoRefresh ? "1px solid rgba(16, 185, 129, 0.2)" : "1px solid var(--border-color)",
+              transition: "var(--transition)"
+            }}
+          >
+            {autoRefresh ? (
+              <>
+                <span style={{
+                  width: "6px",
+                  height: "6px",
+                  background: "var(--success)",
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  boxShadow: "0 0 6px var(--success)"
+                }} />
+                Real-Time Sync ON
+              </>
+            ) : (
+              <>
+                <Pause size={10} />
+                Real-Time Sync OFF
+              </>
+            )}
+          </button>
+
+          {/* Manual Refresh Indicator */}
+          <button
+            onClick={() => {
+              fetchRegistries();
+              fetchStatsAndAnalytics(dateFilter);
+            }}
+            disabled={refreshing}
+            style={{
+              border: "none",
+              padding: "7px 12px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.75rem",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(255, 255, 255, 0.02)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-color)",
+              transition: "var(--transition)"
+            }}
+          >
+            <RefreshCw size={10} className={refreshing ? "spin-animation" : ""} style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }} />
+            <span>Sync</span>
+          </button>
+
+          {/* PDF Report Export */}
+          <button
+            onClick={handleExportPDF}
+            style={{
+              border: "none",
+              padding: "7px 12px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--primary)",
+              color: "#ffffff",
+              fontSize: "0.75rem",
+              fontWeight: "700",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 4px 10px var(--primary-glow)",
+              transition: "var(--transition)"
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = "var(--primary-hover)"}
+            onMouseOut={(e) => e.currentTarget.style.background = "var(--primary)"}
+          >
+            <Download size={12} />
+            <span>Export PDF</span>
+          </button>
+
+          {/* Excel Registry Export */}
+          <button
+            onClick={handleExportExcel}
+            style={{
+              border: "none",
+              padding: "7px 12px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--success)",
+              color: "#ffffff",
+              fontSize: "0.75rem",
+              fontWeight: "700",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 4px 10px rgba(16, 185, 129, 0.2)",
+              transition: "var(--transition)"
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = "var(--success-hover)"}
+            onMouseOut={(e) => e.currentTarget.style.background = "var(--success)"}
+          >
+            <Download size={12} />
+            <span>Export Excel</span>
+          </button>
+
+        </div>
+      </div>
 
       {/* Analytical Cards */}
-      <div className="stats-container" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px", marginBottom: "40px" }}>
-        <div className="stat-card" style={{ display: "flex", alignItems: "center", gap: "20px", textAlign: "left", width: "100%" }}>
-          <div style={{ background: "var(--primary-light)", padding: "16px", borderRadius: "var(--radius-md)" }}>
-            <Users size={28} color="var(--primary)" />
+      <div className="stats-container" style={{ marginBottom: "30px" }}>
+        
+        {/* Total Users */}
+        <div 
+          className="stat-card clickable-card" 
+          onClick={() => navigate("/admin/users")}
+          style={{ cursor: "pointer" }}
+        >
+          <div className="stat-card-icon" style={{ background: "var(--primary-light)", color: "var(--primary)" }}>
+            <Users size={24} />
           </div>
-          <div>
-            <h2 style={{ fontSize: "2rem", marginBottom: 0 }}>{stats?.totalUsers}</h2>
-            <p style={{ color: "var(--text-secondary)", fontWeight: "500", marginTop: "4px" }}>Total Users</p>
-          </div>
-        </div>
-
-        <div className="stat-card" style={{ display: "flex", alignItems: "center", gap: "20px", textAlign: "left", width: "100%" }}>
-          <div style={{ background: "#e0f2fe", padding: "16px", borderRadius: "var(--radius-md)" }}>
-            <FileText size={28} color="#0284c7" />
-          </div>
-          <div>
-            <h2 style={{ fontSize: "2rem", marginBottom: 0, color: "#0284c7" }}>{stats?.totalComplaints}</h2>
-            <p style={{ color: "var(--text-secondary)", fontWeight: "500", marginTop: "4px" }}>Total Complaints</p>
+          <div className="stat-card-info">
+            <h2>{stats?.totalUsers || 0}</h2>
+            <p>Active Users</p>
           </div>
         </div>
 
-        <div className="stat-card" style={{ display: "flex", alignItems: "center", gap: "20px", textAlign: "left", width: "100%" }}>
-          <div style={{ background: "#fef3c7", padding: "16px", borderRadius: "var(--radius-md)" }}>
-            <AlertCircle size={28} color="#d97706" />
+        {/* Total Cases */}
+        <div className="stat-card">
+          <div className="stat-card-icon" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
+            <FileText size={24} />
           </div>
-          <div>
-            <h2 style={{ fontSize: "2rem", marginBottom: 0, color: "#d97706" }}>{stats?.pendingComplaints}</h2>
-            <p style={{ color: "var(--text-secondary)", fontWeight: "500", marginTop: "4px" }}>Pending Action</p>
+          <div className="stat-card-info">
+            <h2>{stats?.totalCases || 0}</h2>
+            <p>Reported Incidents</p>
           </div>
         </div>
 
-        <div className="stat-card" style={{ display: "flex", alignItems: "center", gap: "20px", textAlign: "left", width: "100%" }}>
-          <div style={{ background: "#dcfce7", padding: "16px", borderRadius: "var(--radius-md)" }}>
-            <CheckCircle size={28} color="#15803d" />
+        {/* Pending Action */}
+        <div className="stat-card">
+          <div className="stat-card-icon" style={{ background: "var(--warning-light)", color: "var(--warning)" }}>
+            <AlertCircle size={24} />
           </div>
-          <div>
-            <h2 style={{ fontSize: "2rem", marginBottom: 0, color: "#15803d" }}>{stats?.resolvedComplaints}</h2>
-            <p style={{ color: "var(--text-secondary)", fontWeight: "500", marginTop: "4px" }}>Resolved Cases</p>
+          <div className="stat-card-info">
+            <h2>{stats?.pendingCases || 0}</h2>
+            <p>Pending Audits</p>
+          </div>
+        </div>
+
+        {/* Resolved Cases */}
+        <div className="stat-card">
+          <div className="stat-card-icon" style={{ background: "var(--success-light)", color: "var(--success)" }}>
+            <CheckCircle size={24} />
+          </div>
+          <div className="stat-card-info">
+            <h2>{stats?.resolvedCases || 0}</h2>
+            <p>Resolved Audits</p>
           </div>
         </div>
       </div>
 
-      {/* Visual Charts/Bars Row */}
-      <div style={{ display: "flex", gap: "30px", flexWrap: "wrap", marginBottom: "50px" }}>
-        {/* Status distribution */}
-        <div className="stat-card" style={{ flex: 1, minWidth: "320px", textAlign: "left", padding: "30px", width: "100%" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "20px" }}>Complaints by Status</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {stats && Object.entries(stats.statusBreakdown).map(([status, count]) => {
-              const percentage = stats.totalComplaints > 0 ? (count / stats.totalComplaints) * 100 : 0;
-              return (
-                <div key={status}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", fontWeight: "600", marginBottom: "4px" }}>
-                    <span>{status.replace("_", " ")}</span>
-                    <span style={{ color: "var(--primary)" }}>{count} ({percentage.toFixed(0)}%)</span>
-                  </div>
-                  <div style={{ background: "#f1f5f9", height: "8px", borderRadius: "10px", overflow: "hidden" }}>
-                    <div style={{
-                      background: status === "RESOLVED" ? "#22c55e" : status === "REJECTED" ? "#ef4444" : "var(--primary)",
-                      width: `${percentage}%`,
-                      height: "100%",
-                      borderRadius: "10px"
-                    }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Analytical Visual Charts Section */}
+      <AdminAnalyticsCharts 
+        monthlyData={monthlyData}
+        categoryData={categoryData}
+        statusData={statusData}
+        heatmapData={heatmapData}
+        hotspotData={hotspotData}
+      />
 
-        {/* Category distribution */}
-        <div className="stat-card" style={{ flex: 1, minWidth: "320px", textAlign: "left", padding: "30px", width: "100%" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "20px" }}>Complaints by Category</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {stats && Object.entries(stats.categoryBreakdown).length === 0 ? (
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>No categories submitted yet.</p>
-            ) : (
-              stats && Object.entries(stats.categoryBreakdown).map(([category, count]) => {
-                const percentage = stats.totalComplaints > 0 ? (count / stats.totalComplaints) * 100 : 0;
-                return (
-                  <div key={category}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", fontWeight: "600", marginBottom: "4px" }}>
-                      <span>{category}</span>
-                      <span style={{ color: "var(--primary)" }}>{count} ({percentage.toFixed(0)}%)</span>
-                    </div>
-                    <div style={{ background: "#f1f5f9", height: "8px", borderRadius: "10px", overflow: "hidden" }}>
-                      <div style={{
-                        background: "#0284c7",
-                        width: `${percentage}%`,
-                        height: "100%",
-                        borderRadius: "10px"
-                      }} />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+      {/* Search and Filters Section */}
+      <div className="no-print">
+        <AdminSearchFilters 
+          onFilterChange={handleFilterChange}
+          currentFilters={filters}
+          categories={CATEGORIES}
+          statuses={STATUSES}
+        />
       </div>
 
       {/* Main Table and Details Section */}
       <div style={{ display: "flex", flexDirection: "column", gap: "30px" }}>
         
-        {/* Table list */}
-        <div className="stat-card" style={{ width: "100%", textAlign: "left", padding: "30px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.25rem", fontWeight: "800" }}>All Registered Complaints</h3>
-            
-            {/* Filters */}
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                style={{ padding: "8px 12px", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", fontSize: "0.85rem", fontWeight: "600" }}
-              >
-                <option value="">All Statuses</option>
-                <option value="SUBMITTED">Submitted</option>
-                <option value="UNDER_REVIEW">Under Review</option>
-                <option value="INVESTIGATING">Investigating</option>
-                <option value="RESOLVED">Resolved</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
+        {/* Table component */}
+        <AdminComplaintsTable 
+          complaints={filteredComplaints}
+          officers={officers}
+          onView={setSelectedComplaint}
+          onResolve={handleResolve}
+          onDelete={handleDelete}
+          onAssign={handleAssign}
+          currentUser={user}
+        />
 
-              <select
-                value={filterPriority}
-                onChange={(e) => setFilterPriority(e.target.value)}
-                style={{ padding: "8px 12px", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", fontSize: "0.85rem", fontWeight: "600" }}
-              >
-                <option value="">All Priorities</option>
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-              </select>
-            </div>
-          </div>
-
-          {filteredComplaints.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
-              No complaints match the filter parameters.
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table className="complaint-table" style={{ margin: 0 }}>
-                <thead>
-                  <tr>
-                    <th>Tracking ID</th>
-                    <th>User</th>
-                    <th>Category</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Created Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredComplaints.map((c) => (
-                    <tr key={c.id} style={{ background: selectedComplaint?.id === c.id ? "#f1f5f9" : "transparent" }}>
-                      <td style={{ fontWeight: "700", color: "var(--primary)" }}>{c.complaintId}</td>
-                      <td>
-                        <div style={{ fontWeight: "600", color: "var(--text-primary)" }}>{c.user?.name}</div>
-                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{c.user?.email}</div>
-                      </td>
-                      <td>{c.category}</td>
-                      <td>
-                        <span style={{
-                          fontSize: "0.8rem",
-                          fontWeight: "700",
-                          color: c.priority === "HIGH" ? "#c5221f" : c.priority === "MEDIUM" ? "#b06000" : "#137333"
-                        }}>
-                          {c.priority}
-                        </span>
-                      </td>
-                      <td>
-                        <select
-                          value={c.status}
-                          onChange={(e) => handleStatusChange(c.id, e.target.value)}
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            fontSize: "0.85rem",
-                            fontWeight: "600",
-                            border: "1px solid var(--border-color)",
-                            background: c.status === "RESOLVED" ? "#e6f4ea" : c.status === "REJECTED" ? "#fce8e6" : "#fef7e0",
-                            color: c.status === "RESOLVED" ? "#137333" : c.status === "REJECTED" ? "#c5221f" : "#b06000",
-                            width: "auto",
-                            marginBottom: 0
-                          }}
-                        >
-                          <option value="SUBMITTED">Submitted</option>
-                          <option value="UNDER_REVIEW">Under Review</option>
-                          <option value="INVESTIGATING">Investigating</option>
-                          <option value="RESOLVED">Resolved</option>
-                          <option value="REJECTED">Rejected</option>
-                        </select>
-                      </td>
-                      <td>{new Date(c.createdAt).toLocaleDateString()}</td>
-                      <td>
-                        <div style={{ display: "flex", gap: "10px" }}>
-                          <button
-                            onClick={() => setSelectedComplaint(c)}
-                            style={{
-                              border: "none",
-                              background: "transparent",
-                              color: "var(--primary)",
-                              cursor: "pointer",
-                              padding: "4px"
-                            }}
-                            title="View Case Details"
-                          >
-                            <Eye size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(c.id)}
-                            style={{
-                              border: "none",
-                              background: "transparent",
-                              color: "#dc2626",
-                              cursor: "pointer",
-                              padding: "4px"
-                            }}
-                            title="Delete Complaint"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Detailed audit viewer */}
-        {selectedComplaint && (
-          <div className="stat-card" style={{ width: "100%", textAlign: "left", padding: "40px", border: "2px solid var(--primary)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
-              <div>
-                <span style={{ fontSize: "0.8rem", fontWeight: "700", color: "var(--primary)", background: "var(--primary-light)", padding: "4px 10px", borderRadius: "100px" }}>
-                  {selectedComplaint.complaintId}
-                </span>
-                <h2 style={{ marginTop: "10px", fontSize: "1.5rem", fontWeight: "800" }}>{selectedComplaint.title}</h2>
-                <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginTop: "4px" }}>
-                  Submitted by: <strong>{selectedComplaint.user?.name}</strong> ({selectedComplaint.user?.email} | {selectedComplaint.user?.phone})
-                </p>
+        {/* Detailed audit viewer slide-out */}
+        <AnimatePresence>
+          {selectedComplaint && (
+            <motion.div 
+              className="audit-panel"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+                <div>
+                  <span style={{ 
+                    fontSize: "0.8rem", 
+                    fontWeight: "700", 
+                    color: "var(--accent)", 
+                    background: "var(--accent-light)", 
+                    border: "1px solid rgba(0, 240, 255, 0.2)",
+                    padding: "4px 12px", 
+                    borderRadius: "100px" 
+                  }}>
+                    AUDIT CORE: {selectedComplaint.complaintId}
+                  </span>
+                  <h3 style={{ marginTop: "12px", fontSize: "1.4rem", fontWeight: "700", color: "var(--text-primary)" }}>
+                    {selectedComplaint.title}
+                  </h3>
+                  <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                    Submitting Authority: <strong>{selectedComplaint.user?.name}</strong> ({selectedComplaint.user?.email} | {selectedComplaint.user?.phone})
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedComplaint(null)}
+                  style={{
+                    padding: "8px 16px",
+                    background: "rgba(255, 255, 255, 0.05)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: "pointer",
+                    fontWeight: "600",
+                    width: "auto"
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)"}
+                  onMouseOut={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"}
+                >
+                  Close Audit View
+                </button>
               </div>
-              <button
-                onClick={() => setSelectedComplaint(null)}
-                style={{
-                  padding: "6px 12px",
-                  background: "#e2e8f0",
-                  color: "var(--text-primary)",
-                  border: "none",
-                  borderRadius: "var(--radius-sm)",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                  width: "auto"
-                }}
-              >
-                Close Audit View
-              </button>
-            </div>
 
-            <hr style={{ border: 0, height: "1px", background: "var(--border-color)", margin: "20px 0" }} />
+              <hr style={{ border: 0, height: "1px", background: "var(--border-color)", margin: "25px 0" }} />
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "25px" }}>
-              <div>
-                <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Incident Date</p>
-                <p style={{ fontWeight: "700" }}>{new Date(selectedComplaint.incidentDate).toLocaleDateString()}</p>
-              </div>
-              <div>
-                <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Priority</p>
-                <p style={{
-                  fontWeight: "700",
-                  color: selectedComplaint.priority === "HIGH" ? "#c5221f" : selectedComplaint.priority === "MEDIUM" ? "#b06000" : "#137333"
-                }}>{selectedComplaint.priority}</p>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: "25px" }}>
-              <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "6px" }}>Citizen Description</p>
-              <div style={{ background: "var(--bg-primary)", padding: "20px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", whiteSpace: "pre-wrap", lineHeight: "1.6" }}>
-                {selectedComplaint.description}
-              </div>
-            </div>
-
-            {selectedComplaint.evidenceFiles && selectedComplaint.evidenceFiles.length > 0 ? (
-              <div>
-                <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "10px" }}>Evidence Uploads</p>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                  {selectedComplaint.evidenceFiles.map((file) => (
-                    <a
-                      key={file.id}
-                      href={`http://localhost:8080/api/files/${file.filePath}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "10px 16px",
-                        background: "#f1f5f9",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "var(--radius-sm)",
-                        color: "var(--text-primary)",
-                        fontWeight: "600",
-                        textDecoration: "none",
-                        fontSize: "0.85rem"
-                      }}
-                    >
-                      <Download size={16} color="var(--primary)" />
-                      <span>{file.fileName}</span>
-                    </a>
-                  ))}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "20px", marginBottom: "25px" }}>
+                <div>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Logged Incident Date</p>
+                  <p style={{ fontWeight: "700", marginTop: "4px" }}>{new Date(selectedComplaint.incidentDate).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Priority Level</p>
+                  <p style={{
+                    fontWeight: "700",
+                    color: selectedComplaint.priority === "HIGH" ? "var(--danger)" : selectedComplaint.priority === "MEDIUM" ? "var(--warning)" : "var(--success)",
+                    marginTop: "4px"
+                  }}>{selectedComplaint.priority}</p>
+                </div>
+                <div>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Location Vector</p>
+                  <p style={{ fontWeight: "700", marginTop: "4px" }}>{selectedComplaint.location || "Delhi"}</p>
+                </div>
+                <div>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Case Officer Assigned</p>
+                  <p style={{ fontWeight: "700", marginTop: "4px", color: selectedComplaint.officer?.name ? "var(--primary)" : "var(--text-muted)" }}>
+                    {selectedComplaint.officer?.name || "Unassigned"}
+                  </p>
                 </div>
               </div>
-            ) : (
-              <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>No files uploaded with this complaint.</p>
-            )}
-          </div>
-        )}
+
+              <div style={{ marginBottom: "25px" }}>
+                <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "8px" }}>Statement logs</p>
+                <div style={{ 
+                  background: "rgba(3, 3, 7, 0.4)", 
+                  padding: "20px", 
+                  borderRadius: "var(--radius-md)", 
+                  border: "1px solid var(--border-color)", 
+                  whiteSpace: "pre-wrap", 
+                  lineHeight: "1.6",
+                  fontSize: "0.95rem"
+                }}>
+                  {selectedComplaint.description}
+                </div>
+              </div>
+
+              {selectedComplaint.evidenceFiles && selectedComplaint.evidenceFiles.length > 0 ? (
+                <div>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "12px" }}>Evidence Uploads</p>
+                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                    {selectedComplaint.evidenceFiles.map((file) => (
+                      <a
+                        key={file.id}
+                        href={`http://localhost:8080/api/files/${file.filePath}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="evidence-download-chip"
+                      >
+                        <Download size={14} color="var(--primary)" />
+                        <span>{file.fileName}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>No files uploaded with this complaint.</p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+      
+      {/* Global CSS inject for anims */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        .spin-animation {
+          display: inline-block;
+        }
+        .analytics-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 25px;
+          margin-bottom: 40px;
+        }
+        @media (max-width: 1024px) {
+          .analytics-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        .analytics-card {
+          background: var(--glass-bg);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-md);
+          padding: 24px;
+          box-shadow: var(--shadow-sm);
+          transition: var(--transition);
+        }
+        .analytics-card:hover {
+          border-color: rgba(0, 240, 255, 0.35);
+          background: var(--glass-bg-hover);
+          transform: translateY(-4px);
+          box-shadow: 0 10px 30px rgba(0, 240, 255, 0.08), var(--shadow-md);
+        }
+        
+        /* Shake keyframes for active notification bell */
+        @keyframes shake {
+          0% { transform: rotate(0); }
+          15% { transform: rotate(10deg); }
+          30% { transform: rotate(-10deg); }
+          45% { transform: rotate(5deg); }
+          60% { transform: rotate(-5deg); }
+          75% { transform: rotate(2deg); }
+          85% { transform: rotate(-2deg); }
+          100% { transform: rotate(0); }
+        }
+        .shake-animation {
+          animation: shake 0.6s ease-in-out infinite alternate;
+        }
+      `}} />
+    </motion.div>
   );
 }
 

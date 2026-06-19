@@ -47,12 +47,16 @@ async function login(req, res) {
       return res.status(401).json({ error: 'Bad credentials' });
     }
 
+    if (user.status === 'DISABLED') {
+      return res.status(403).json({ error: 'Your account has been disabled.' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Bad credentials' });
     }
 
-    const token = generateToken(user.email, user.role);
+    const token = generateToken(user.email, user.role, user.id);
 
     return res.status(200).json({
       token,
@@ -78,7 +82,7 @@ async function refresh(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const token = generateToken(req.user.email, req.user.role);
+    const token = generateToken(req.user.email, req.user.role, req.user.id);
 
     return res.status(200).json({
       token,

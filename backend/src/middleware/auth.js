@@ -6,9 +6,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 const JWT_EXPIRATION = parseInt(process.env.JWT_EXPIRATION) || 86400000; // in milliseconds
 
 // Generate JWT Token (matching the sub: email, role claims)
-function generateToken(email, role) {
+function generateToken(email, role, userId) {
   // jwt.sign expiresIn takes seconds or formatted string
-  return jwt.sign({ sub: email, role: role }, JWT_SECRET, {
+  return jwt.sign({ sub: email, role: role, userId: userId }, JWT_SECRET, {
     expiresIn: Math.floor(JWT_EXPIRATION / 1000),
   });
 }
@@ -28,6 +28,10 @@ async function authenticate(req, res, next) {
     const user = await User.findOne({ where: { email } });
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (user.status === 'DISABLED') {
+      return res.status(403).json({ error: 'Your account has been disabled.' });
     }
 
     req.user = user;

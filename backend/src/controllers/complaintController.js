@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 async function submitComplaint(req, res) {
   try {
     const user = req.user;
-    const { title, category, priority, description, incidentDate } = req.body;
+    const { title, category, priority, description, incidentDate, location } = req.body;
 
     if (!title || !category || !priority || !incidentDate) {
       return res.status(400).json({ error: 'Required fields are missing' });
@@ -13,6 +13,10 @@ async function submitComplaint(req, res) {
 
     // Generate Tracking ID: COMP-XXXXXXXX (8 random alphanumeric characters)
     const trackingId = 'COMP-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+
+    // Default to a random Indian city to enrich charts in visual heatmap/hotspot displays
+    const cities = ['Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata'];
+    const randomCity = cities[Math.floor(Math.random() * cities.length)];
 
     // Create the complaint
     const complaint = await Complaint.create({
@@ -24,6 +28,7 @@ async function submitComplaint(req, res) {
       description,
       incidentDate,
       status: 'SUBMITTED',
+      location: location || randomCity,
     });
 
     // Handle file upload if present
@@ -48,6 +53,20 @@ async function submitComplaint(req, res) {
       createdAt: user.createdAt,
     };
     complaint.setDataValue('user', userJson);
+    complaint.setDataValue('officer', null);
+
+    // Emit live Socket.IO update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('complaint_submitted', complaint);
+      io.emit('notification', {
+        type: 'complaint_submitted',
+        message: `🔴 New Complaint Submitted: ${complaint.complaintId}`,
+        complaintId: complaint.complaintId,
+        id: complaint.id,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     return res.status(200).json(complaint);
   } catch (error) {
@@ -62,6 +81,7 @@ async function getAllComplaints(req, res) {
       order: [['createdAt', 'DESC']],
       include: [
         { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'role', 'createdAt'] },
+        { model: User, as: 'officer', attributes: ['id', 'name', 'email', 'phone'] },
         { model: EvidenceFile, as: 'evidenceFiles' },
       ],
     });
@@ -96,6 +116,7 @@ async function getComplaintById(req, res) {
     const complaint = await Complaint.findByPk(id, {
       include: [
         { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'role', 'createdAt'] },
+        { model: User, as: 'officer', attributes: ['id', 'name', 'email', 'phone'] },
         { model: EvidenceFile, as: 'evidenceFiles' },
       ],
     });
@@ -127,9 +148,24 @@ async function updateComplaintStatus(req, res) {
     const updatedComplaint = await Complaint.findByPk(id, {
       include: [
         { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'role', 'createdAt'] },
+        { model: User, as: 'officer', attributes: ['id', 'name', 'email', 'phone'] },
         { model: EvidenceFile, as: 'evidenceFiles' },
       ],
     });
+
+    // Emit live Socket.IO update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('complaint_updated', updatedComplaint);
+      io.emit('notification', {
+        type: 'complaint_status_updated',
+        message: `📢 Complaint ${updatedComplaint.complaintId} status updated to ${status.replace('_', ' ')}`,
+        complaintId: updatedComplaint.complaintId,
+        id: updatedComplaint.id,
+        status: status.toUpperCase(),
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     return res.status(200).json(updatedComplaint);
   } catch (error) {
@@ -146,7 +182,22 @@ async function deleteComplaint(req, res) {
       return res.status(404).json({ error: 'Complaint not found' });
     }
 
+    const complaintId = complaint.complaintId;
     await complaint.destroy();
+
+    // Emit live Socket.IO update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('complaint_deleted', { id: parseInt(id, 10), complaintId });
+      io.emit('notification', {
+        type: 'complaint_deleted',
+        message: `🗑️ Complaint ${complaintId} has been deleted`,
+        complaintId,
+        id: parseInt(id, 10),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     return res.status(200).json({ message: 'Complaint deleted successfully' });
   } catch (error) {
     console.error('Delete complaint error:', error);

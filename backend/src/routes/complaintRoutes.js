@@ -1,23 +1,24 @@
 const express = require('express');
 const router = express.Router();
 const complaintController = require('../controllers/complaintController');
-const { authenticate, isAdmin } = require('../middleware/auth');
+const adminAuth = require('../middleware/adminAuth');
+const citizenAuth = require('../middleware/citizenAuth');
 const upload = require('../middleware/upload');
 
 // Public route for tracking status
 router.get('/track/:complaintId', complaintController.trackComplaint);
 
-// Authenticated specific routes
-router.post('/', authenticate, upload.single('evidence'), complaintController.submitComplaint);
-router.get('/user', authenticate, complaintController.getCitizenComplaints);
+// Citizen specific routes
+router.post('/', citizenAuth, upload.single('evidence'), complaintController.submitComplaint);
+router.get('/user', citizenAuth, complaintController.getCitizenComplaints);
 
-// Admin specific routes
-router.get('/admin/stats', authenticate, isAdmin, complaintController.getAdminStats);
-router.get('/', authenticate, isAdmin, complaintController.getAllComplaints);
+// Admin dashboard complaints routes
+router.get('/admin/stats', adminAuth, complaintController.getAdminStats);
+router.get('/', adminAuth, complaintController.getAllComplaints);
 
 // General ID routes
-router.get('/:id', authenticate, complaintController.getComplaintById);
-router.put('/:id', authenticate, isAdmin, complaintController.updateComplaintStatus);
-router.delete('/:id', authenticate, isAdmin, complaintController.deleteComplaint);
+router.get('/:id', adminAuth, complaintController.getComplaintById);
+router.put('/:id', adminAuth, complaintController.updateComplaintStatus);
+router.delete('/:id', adminAuth, complaintController.deleteComplaint);
 
 module.exports = router;

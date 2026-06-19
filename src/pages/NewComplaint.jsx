@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+import { ShieldAlert, FileText, Calendar, Upload, AlertCircle } from "lucide-react";
+import { motion } from "framer-motion";
 
 function NewComplaint() {
   const navigate = useNavigate();
@@ -67,40 +69,58 @@ function NewComplaint() {
     }
   };
 
+  const formatFileSize = (bytes) => {
+    if (!bytes) return "";
+    if (bytes < 1024) return bytes + " Bytes";
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    else return (bytes / 1048576).toFixed(1) + " MB";
+  };
+
   return (
-    <div className="auth-container">
-      <div className="auth-box" style={{ width: "550px" }}>
-        <h2>Register Complaint</h2>
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 80, damping: 15 }}
+      style={{ maxWidth: "700px", margin: "0 auto", width: "100%" }}
+    >
+      <div className="profile-card" style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}>
+        <h2>
+          <ShieldAlert size={22} color="var(--primary)" style={{ filter: "drop-shadow(0 0 6px var(--primary-glow))" }} />
+          <span>File Incident Report</span>
+        </h2>
+        <hr style={{ border: "0", height: "1px", background: "var(--border-color)", marginBottom: "30px" }} />
 
         {error && (
-          <div style={{
-            background: "#ffebee",
-            color: "#c62828",
-            padding: "10px",
-            borderRadius: "var(--radius-sm)",
-            marginBottom: "20px",
-            fontSize: "0.9rem",
-            fontWeight: "500",
-            border: "1px solid #ffcdd2"
-          }}>
+          <motion.div 
+            className="alert-error" 
+            style={{ marginBottom: "25px" }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
             {error}
-          </div>
+          </motion.div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <label style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--text-secondary)" }}>Complaint Title *</label>
-          <input
-            type="text"
-            name="title"
-            placeholder="e.g. Identity theft on Facebook"
-            value={formData.title}
-            onChange={handleChange}
-            required
-          />
+          <div className="form-group">
+            <label>Complaint Title *</label>
+            <div style={{ position: "relative" }}>
+              <FileText size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <input
+                type="text"
+                name="title"
+                placeholder="e.g. Identity theft on Facebook profile"
+                value={formData.title}
+                onChange={handleChange}
+                style={{ paddingLeft: "42px" }}
+                required
+              />
+            </div>
+          </div>
 
-          <div style={{ display: "flex", gap: "15px" }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--text-secondary)" }}>Category *</label>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Category *</label>
               <select
                 name="category"
                 value={formData.category}
@@ -117,8 +137,8 @@ function NewComplaint() {
               </select>
             </div>
 
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--text-secondary)" }}>Priority *</label>
+            <div className="form-group">
+              <label>Priority Level *</label>
               <select
                 name="priority"
                 value={formData.priority}
@@ -133,40 +153,76 @@ function NewComplaint() {
             </div>
           </div>
 
-          <label style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--text-secondary)" }}>Incident Date *</label>
-          <input
-            type="date"
-            name="date"
-            value={formData.date}
-            onChange={handleChange}
-            required
-          />
+          <div className="form-group">
+            <label>Incident Date *</label>
+            <div style={{ position: "relative" }}>
+              <Calendar size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <input
+                type="date"
+                name="date"
+                value={formData.date}
+                onChange={handleChange}
+                style={{ paddingLeft: "42px" }}
+                required
+              />
+            </div>
+          </div>
 
-          <label style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--text-secondary)" }}>Description *</label>
-          <textarea
-            rows="5"
-            name="description"
-            placeholder="Explain the incident in detail..."
-            value={formData.description}
-            onChange={handleChange}
-            required
-          />
+          <div className="form-group">
+            <label>Detailed Description *</label>
+            <textarea
+              rows="5"
+              name="description"
+              placeholder="Provide a comprehensive timeline of events, website addresses, accounts, and any communication received..."
+              value={formData.description}
+              onChange={handleChange}
+              required
+            />
+          </div>
 
-          <label style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--text-secondary)" }}>Upload Evidence (Max 10MB - JPG, PNG, PDF)</label>
-          <input
-            type="file"
-            name="evidence"
-            accept=".jpg,.jpeg,.png,.pdf"
-            onChange={handleChange}
-            style={{ padding: "8px" }}
-          />
+          <div className="form-group">
+            <label>Upload Secure Evidence (Max 10MB | JPG, PNG, PDF)</label>
+            <label className="custom-file-upload">
+              <Upload className="custom-file-icon" size={24} />
+              {formData.evidence ? (
+                <div style={{ textAlign: "center" }}>
+                  <span className="custom-file-selected">{formData.evidence.name}</span>
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                    Size: {formatFileSize(formData.evidence.size)}
+                  </p>
+                </div>
+              ) : (
+                <span className="custom-file-text">Drag & drop files or click to browse</span>
+              )}
+              <input
+                type="file"
+                name="evidence"
+                accept=".jpg,.jpeg,.png,.pdf"
+                onChange={handleChange}
+                style={{ display: "none" }}
+              />
+            </label>
+          </div>
 
-          <button type="submit" disabled={loading}>
-            {loading ? "Submitting..." : "Submit Complaint"}
+          <button 
+            type="submit" 
+            disabled={loading} 
+            style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              gap: "8px",
+              marginTop: "30px",
+              background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)",
+              boxShadow: "0 4px 18px var(--primary-glow)"
+            }}
+          >
+            <AlertCircle size={18} />
+            <span>{loading ? "Registering Report..." : "Submit Secure Report"}</span>
           </button>
         </form>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

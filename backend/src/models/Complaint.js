@@ -39,6 +39,16 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: false,
     defaultValue: 'SUBMITTED',
   },
+  location: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'Unknown',
+  },
+  officerId: {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    field: 'officer_id',
+  },
 }, {
   tableName: 'complaints',
 });
