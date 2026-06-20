@@ -16,6 +16,7 @@ const fileRoutes = require('./routes/fileRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const officerRoutes = require('./routes/officerRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -28,12 +29,8 @@ const io = new Server(server, {
 });
 app.set('io', io);
 
-io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
-  socket.on('disconnect', () => {
-    console.log(`Socket disconnected: ${socket.id}`);
-  });
-});
+const initSocketServer = require('./socket/socketServer');
+initSocketServer(io);
 
 const PORT = process.env.PORT || 8080;
 
@@ -55,6 +52,7 @@ app.use('/api/files', fileRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/officer', officerRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {

@@ -3,6 +3,7 @@ const Complaint = require('./Complaint');
 const EvidenceFile = require('./EvidenceFile');
 const OfficerNote = require('./OfficerNote');
 const EvidenceUpload = require('./EvidenceUpload');
+const Notification = require('./Notification');
 
 // Setup Associations
 User.hasMany(Complaint, {
@@ -71,10 +72,22 @@ User.hasMany(EvidenceUpload, {
   as: 'uploadedEvidence',
 });
 
+// Notification Associations
+User.hasMany(Notification, {
+  foreignKey: { name: 'userId', field: 'user_id', allowNull: false },
+  as: 'notifications',
+  onDelete: 'CASCADE',
+});
+Notification.belongsTo(User, {
+  foreignKey: { name: 'userId', field: 'user_id', allowNull: false },
+  as: 'user',
+});
+
 module.exports = {
   User,
   Complaint,
   EvidenceFile,
   OfficerNote,
   EvidenceUpload,
+  Notification,
 };

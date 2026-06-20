@@ -1,4 +1,4 @@
-const { Complaint, User, EvidenceFile, OfficerNote, EvidenceUpload } = require('../models');
+const { Complaint, User, EvidenceFile, OfficerNote, EvidenceUpload, Notification } = require('../models');
 const { Op } = require('sequelize');
 const fs = require('fs');
 const path = require('path');
@@ -158,14 +158,47 @@ async function updateCaseStatus(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_updated', updatedComplaint);
-      io.emit('notification', {
-        type: 'complaint_status_updated',
-        message: `📢 Complaint ${updatedComplaint.complaintId} status updated to ${status.replace('_', ' ')}`,
-        complaintId: updatedComplaint.complaintId,
-        id: updatedComplaint.id,
-        status: status.toUpperCase(),
-        timestamp: new Date().toISOString(),
+    }
+
+    // Create notifications for citizen & admin if resolved
+    try {
+      const statusUpper = status.toUpperCase();
+      const isResolved = statusUpper === 'RESOLVED';
+      
+      const citizenMsg = isResolved
+        ? `Complaint ${updatedComplaint.complaintId} resolved`
+        : `Your complaint ${updatedComplaint.complaintId} status updated to ${statusUpper.replace('_', ' ')}`;
+      
+      const citizenNotif = await Notification.create({
+        userId: updatedComplaint.userId,
+        title: isResolved ? 'Complaint Resolved' : 'Complaint Status Updated',
+        message: citizenMsg,
+        type: isResolved ? 'SUCCESS' : 'INFO',
+        isRead: false
       });
+      
+      if (io) {
+        io.to(`user_${updatedComplaint.userId}`).emit('notification', citizenNotif);
+      }
+
+      if (isResolved) {
+        const admins = await User.findAll({ where: { role: 'ROLE_ADMIN' } });
+        const adminNotifications = admins.map(admin => ({
+          userId: admin.id,
+          title: 'Complaint Resolved',
+          message: `Complaint ${updatedComplaint.complaintId} resolved`,
+          type: 'SUCCESS',
+          isRead: false
+        }));
+        const createdAdminNotifs = await Notification.bulkCreate(adminNotifications);
+        if (io) {
+          for (const notif of createdAdminNotifs) {
+            io.to(`user_${notif.userId}`).emit('notification', notif);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error creating status update notifications:', error);
     }
 
     return res.status(200).json(updatedComplaint);
@@ -203,13 +236,6 @@ async function addOfficerNote(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_note_added', { complaintId: complaint.complaintId, note: newNote });
-      io.emit('notification', {
-        type: 'complaint_note_added',
-        message: `📝 Note added to Complaint ${complaint.complaintId} by ${req.user.name}`,
-        complaintId: complaint.complaintId,
-        id: complaint.id,
-        timestamp: new Date().toISOString(),
-      });
     }
 
     return res.status(200).json(newNote);
@@ -256,13 +282,26 @@ async function uploadEvidence(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_evidence_added', { complaintId: complaint.complaintId, evidence });
-      io.emit('notification', {
-        type: 'complaint_evidence_added',
-        message: `📎 Evidence file uploaded to Complaint ${complaint.complaintId} by ${req.user.name}`,
-        complaintId: complaint.complaintId,
-        id: complaint.id,
-        timestamp: new Date().toISOString(),
-      });
+    }
+
+    // Save notification in DB for all Admin users and emit to their rooms
+    try {
+      const admins = await User.findAll({ where: { role: 'ROLE_ADMIN' } });
+      const adminNotifications = admins.map(admin => ({
+        userId: admin.id,
+        title: 'New Evidence Uploaded',
+        message: `New evidence uploaded for complaint ${complaint.complaintId} by ${req.user.name}`,
+        type: 'INFO',
+        isRead: false
+      }));
+      const createdAdminNotifs = await Notification.bulkCreate(adminNotifications);
+      if (io) {
+        for (const notif of createdAdminNotifs) {
+          io.to(`user_${notif.userId}`).emit('notification', notif);
+        }
+      }
+    } catch (error) {
+      console.error('Error creating evidence upload notifications:', error);
     }
 
     return res.status(200).json(evidence);

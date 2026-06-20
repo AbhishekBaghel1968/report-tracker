@@ -1,4 +1,4 @@
-const { User, Complaint, EvidenceFile } = require('../models');
+const { User, Complaint, EvidenceFile, Notification } = require('../models');
 const { Op } = require('sequelize');
 
 /**
@@ -151,13 +151,24 @@ async function assignComplaint(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_updated', updatedComplaint);
-      io.emit('notification', {
-        type: 'complaint_assigned',
-        message: `📋 Complaint ${complaint.complaintId} has been assigned to ${officerName}`,
-        complaintId: complaint.complaintId,
-        id: complaint.id,
-        timestamp: new Date().toISOString()
-      });
+    }
+
+    // Save notification in DB for assigned officer and emit to their room
+    if (officerId) {
+      try {
+        const officerNotif = await Notification.create({
+          userId: officerId,
+          title: 'Complaint Assigned',
+          message: `New case assigned to you (${complaint.complaintId})`,
+          type: 'INFO',
+          isRead: false
+        });
+        if (io) {
+          io.to(`user_${officerId}`).emit('notification', officerNotif);
+        }
+      } catch (error) {
+        console.error('Error creating assignment notification:', error);
+      }
     }
 
     return res.status(200).json(updatedComplaint);
@@ -213,13 +224,24 @@ async function assignComplaintById(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_updated', updatedComplaint);
-      io.emit('notification', {
-        type: 'complaint_assigned',
-        message: `📋 Complaint ${complaint.complaintId} has been assigned to ${officerName}`,
-        complaintId: complaint.complaintId,
-        id: complaint.id,
-        timestamp: new Date().toISOString()
-      });
+    }
+
+    // Save notification in DB for assigned officer and emit to their room
+    if (officerId) {
+      try {
+        const officerNotif = await Notification.create({
+          userId: officerId,
+          title: 'Complaint Assigned',
+          message: `New case assigned to you (${complaint.complaintId})`,
+          type: 'INFO',
+          isRead: false
+        });
+        if (io) {
+          io.to(`user_${officerId}`).emit('notification', officerNotif);
+        }
+      } catch (error) {
+        console.error('Error creating assignment notification:', error);
+      }
     }
 
     return res.status(200).json(updatedComplaint);

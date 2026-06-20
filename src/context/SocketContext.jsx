@@ -1,59 +1,84 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { io } from "socket.io-client";
 import { toast } from "react-hot-toast";
 import { useAuth } from "./AuthContext";
+import { initiateSocketConnection } from "../services/socket";
+import api from "../services/api";
 
 const SocketContext = createContext(null);
 
 export const useSocket = () => useContext(SocketContext);
 
 export const SocketProvider = ({ children }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Fetch initial notification history
+  const fetchNotifications = async () => {
+    try {
+      const response = await api.get("/notifications");
+      setNotifications(response.data);
+      setUnreadCount(response.data.filter(n => !n.isRead).length);
+    } catch (err) {
+      console.error("Failed to fetch notifications list:", err);
+    }
+  };
+
   useEffect(() => {
-    if (!user || (user.role !== "ROLE_ADMIN" && user.role !== "ROLE_OFFICER")) {
+    if (!user) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
       }
+      setNotifications([]);
+      setUnreadCount(0);
       return;
     }
 
-    const socketInstance = io("http://localhost:8080", {
-      withCredentials: true,
-    });
+    // Connect to backend socket server
+    const socketInstance = initiateSocketConnection(token, user.id, user.role);
 
     socketInstance.on("connect", () => {
-      console.log("Connected to SOC real-time gateway:", socketInstance.id);
+      console.log("Connected to real-time notification socket gateway:", socketInstance.id);
+      fetchNotifications();
     });
 
     socketInstance.on("notification", (notification) => {
-      setNotifications((prev) => [notification, ...prev].slice(0, 50));
+      setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((c) => c + 1);
 
-      // Play audio indicator or emit browser toast
+      // Play custom/browser audio alert or show toast alert
+      const typeColor = notification.type === "SUCCESS" ? "var(--success)" :
+                        notification.type === "ERROR" ? "var(--danger)" :
+                        notification.type === "WARNING" ? "var(--warning)" :
+                        "var(--accent)";
+
       toast.custom((t) => (
         <div
-          className={`${
-            t.visible ? 'animate-enter' : 'animate-leave'
-          } max-w-md w-full bg-slate-900 border border-cyan-500/30 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+          className={`${t.visible ? 'animate-enter' : 'animate-leave'}`}
           style={{
-            background: "rgba(10, 10, 20, 0.95)",
-            borderLeft: "4px solid var(--accent)",
+            maxWidth: "380px",
+            width: "100%",
+            background: "rgba(10, 10, 18, 0.95)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderLeft: `4px solid ${typeColor}`,
+            borderRadius: "var(--radius-md, 14px)",
             padding: "16px",
             color: "var(--text-primary)",
-            fontFamily: "var(--font-primary, sans-serif)",
-            boxShadow: "0 0 15px rgba(0, 240, 255, 0.25)"
+            boxShadow: `0 8px 32px rgba(0, 0, 0, 0.7), 0 0 15px ${typeColor}33`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            pointerEvents: "auto"
           }}
         >
-          <div className="flex-1 w-0">
-            <p style={{ fontWeight: "700", fontSize: "0.9rem", color: "var(--text-primary)" }}>
-              SOC ALERT
+          <div style={{ flex: 1, marginRight: "12px" }}>
+            <p style={{ fontWeight: "700", fontSize: "0.85rem", color: typeColor, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              🔔 {notification.title || "SECURITY ALERT"}
             </p>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-primary)", marginTop: "4px", lineHeight: "1.4" }}>
               {notification.message}
             </p>
           </div>
@@ -65,8 +90,13 @@ export const SocketProvider = ({ children }) => {
               color: "var(--text-muted)",
               cursor: "pointer",
               fontSize: "0.8rem",
-              paddingLeft: "10px"
+              fontWeight: "600",
+              padding: "4px 8px",
+              borderRadius: "4px",
+              transition: "var(--transition)"
             }}
+            onMouseOver={(e) => e.currentTarget.style.color = "var(--text-primary)"}
+            onMouseOut={(e) => e.currentTarget.style.color = "var(--text-muted)"}
           >
             Dismiss
           </button>
@@ -81,17 +111,60 @@ export const SocketProvider = ({ children }) => {
     };
   }, [user]);
 
-  const markAllAsRead = () => {
-    setUnreadCount(0);
+  const markAsRead = async (id) => {
+    try {
+      await api.put(`/notifications/${id}/read`);
+      setNotifications(prev =>
+        prev.map(n => n.id === id ? { ...n, isRead: true } : n)
+      );
+      setUnreadCount(c => Math.max(0, c - 1));
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err);
+    }
   };
 
-  const clearNotifications = () => {
-    setNotifications([]);
-    setUnreadCount(0);
+  const deleteNotification = async (id) => {
+    try {
+      await api.delete(`/notifications/${id}`);
+      setNotifications(prev => {
+        const target = prev.find(n => n.id === id);
+        if (target && !target.isRead) {
+          setUnreadCount(c => Math.max(0, c - 1));
+        }
+        return prev.filter(n => n.id !== id);
+      });
+    } catch (err) {
+      console.error("Failed to delete notification:", err);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const unreadList = notifications.filter(n => !n.isRead);
+      if (unreadList.length > 0) {
+        await Promise.all(unreadList.map(n => api.put(`/notifications/${n.id}/read`)));
+      }
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error("Failed to mark all notifications as read:", err);
+    }
+  };
+
+  const clearNotifications = async () => {
+    try {
+      if (notifications.length > 0) {
+        await Promise.all(notifications.map(n => api.delete(`/notifications/${n.id}`)));
+      }
+      setNotifications([]);
+      setUnreadCount(0);
+    } catch (err) {
+      console.error("Failed to clear notifications:", err);
+    }
   };
 
   return (
-    <SocketContext.Provider value={{ socket, notifications, unreadCount, markAllAsRead, clearNotifications }}>
+    <SocketContext.Provider value={{ socket, notifications, unreadCount, markAsRead, deleteNotification, markAllAsRead, clearNotifications }}>
       {children}
     </SocketContext.Provider>
   );

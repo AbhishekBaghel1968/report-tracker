@@ -5,14 +5,13 @@ import { useAuth } from "../context/AuthContext";
 import { useSocket } from "../context/SocketContext";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
+import NotificationBell from "./NotificationBell";
 
 function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const { notifications = [], unreadCount = 0, markAllAsRead = () => {}, clearNotifications = () => {} } = useSocket() || {};
 
   const handleLogout = async () => {
     await logout();
@@ -242,100 +241,7 @@ function Layout() {
               </div>
 
               {/* Notification Center */}
-              {isStaff && (
-                <div style={{ position: "relative" }}>
-                  <button
-                    onClick={() => {
-                      setShowNotifications(!showNotifications);
-                      if (!showNotifications) markAllAsRead();
-                    }}
-                    style={{
-                      background: "rgba(255, 255, 255, 0.04)",
-                      border: "1px solid var(--border-color)",
-                      padding: "10px",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      color: unreadCount > 0 ? "var(--accent)" : "var(--text-secondary)",
-                      position: "relative",
-                      transition: "var(--transition)"
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)"}
-                    onMouseOut={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)"}
-                  >
-                    {unreadCount > 0 ? <Bell size={20} className="shake-animation" /> : <BellOff size={20} />}
-                    {unreadCount > 0 && (
-                      <span style={{
-                        position: "absolute",
-                        top: "-2px",
-                        right: "-2px",
-                        background: "var(--danger)",
-                        color: "#ffffff",
-                        fontSize: "0.7rem",
-                        fontWeight: "700",
-                        borderRadius: "50%",
-                        width: "18px",
-                        height: "18px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        boxShadow: "0 0 8px var(--danger)"
-                      }}>
-                        {unreadCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Dropdown list */}
-                  {showNotifications && (
-                    <div style={{
-                      position: "absolute",
-                      top: "45px",
-                      right: 0,
-                      width: "320px",
-                      background: "rgba(10, 10, 18, 0.96)",
-                      backdropFilter: "blur(8px)",
-                      border: "1px solid var(--glass-border)",
-                      borderRadius: "var(--radius-md)",
-                      boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
-                      zIndex: 999,
-                      overflow: "hidden"
-                    }}>
-                      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontWeight: "700", fontSize: "0.85rem" }}>Security Alerts</span>
-                        <div style={{ display: "flex", gap: "10px" }}>
-                          <button onClick={clearNotifications} style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.75rem" }}>Clear</button>
-                          <button onClick={() => setShowNotifications(false)} style={{ background: "transparent", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "0.75rem" }}>Close</button>
-                        </div>
-                      </div>
-
-                      <div style={{ maxHeight: "280px", overflowY: "auto" }}>
-                        {notifications.length === 0 ? (
-                          <div style={{ padding: "30px 16px", textCol: "var(--text-muted)", fontSize: "0.8rem", textAlign: "center" }}>
-                            No notifications logged in this session.
-                          </div>
-                        ) : (
-                          notifications.map((notif, index) => (
-                            <div 
-                              key={index} 
-                              style={{ 
-                                padding: "12px 16px", 
-                                borderBottom: index < notifications.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none",
-                                fontSize: "0.8rem",
-                                background: index === 0 && unreadCount > 0 ? "rgba(0, 240, 255, 0.02)" : "transparent"
-                              }}
-                            >
-                              <p style={{ color: "var(--text-primary)", lineHeight: "1.4" }}>{notif.message}</p>
-                              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "4px", display: "inline-block" }}>
-                                {new Date(notif.timestamp).toLocaleTimeString()}
-                              </span>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+              <NotificationBell />
             </header>
             
             <Outlet />

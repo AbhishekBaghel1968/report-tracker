@@ -1,4 +1,4 @@
-const { Complaint, User, EvidenceFile } = require('../models');
+const { Complaint, User, EvidenceFile, Notification } = require('../models');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 
@@ -59,13 +59,26 @@ async function submitComplaint(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_submitted', complaint);
-      io.emit('notification', {
-        type: 'complaint_submitted',
-        message: `🔴 New Complaint Submitted: ${complaint.complaintId}`,
-        complaintId: complaint.complaintId,
-        id: complaint.id,
-        timestamp: new Date().toISOString(),
-      });
+    }
+
+    // Save notification in DB for all Admin users and emit to their rooms
+    try {
+      const admins = await User.findAll({ where: { role: 'ROLE_ADMIN' } });
+      const adminNotifications = admins.map(admin => ({
+        userId: admin.id,
+        title: 'New Complaint Submitted',
+        message: `New complaint submitted by citizen (${complaint.complaintId})`,
+        type: 'INFO',
+        isRead: false
+      }));
+      const createdAdminNotifs = await Notification.bulkCreate(adminNotifications);
+      if (io) {
+        for (const notif of createdAdminNotifs) {
+          io.to(`user_${notif.userId}`).emit('notification', notif);
+        }
+      }
+    } catch (error) {
+      console.error('Error creating submission notifications:', error);
     }
 
     return res.status(200).json(complaint);
@@ -157,14 +170,47 @@ async function updateComplaintStatus(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_updated', updatedComplaint);
-      io.emit('notification', {
-        type: 'complaint_status_updated',
-        message: `📢 Complaint ${updatedComplaint.complaintId} status updated to ${status.replace('_', ' ')}`,
-        complaintId: updatedComplaint.complaintId,
-        id: updatedComplaint.id,
-        status: status.toUpperCase(),
-        timestamp: new Date().toISOString(),
+    }
+
+    // Create notifications for citizen & admin if resolved
+    try {
+      const statusUpper = status.toUpperCase();
+      const isResolved = statusUpper === 'RESOLVED';
+      
+      const citizenMsg = isResolved
+        ? `Complaint ${updatedComplaint.complaintId} resolved`
+        : `Your complaint ${updatedComplaint.complaintId} status updated to ${statusUpper.replace('_', ' ')}`;
+      
+      const citizenNotif = await Notification.create({
+        userId: updatedComplaint.userId,
+        title: isResolved ? 'Complaint Resolved' : 'Complaint Status Updated',
+        message: citizenMsg,
+        type: isResolved ? 'SUCCESS' : 'INFO',
+        isRead: false
       });
+      
+      if (io) {
+        io.to(`user_${updatedComplaint.userId}`).emit('notification', citizenNotif);
+      }
+
+      if (isResolved) {
+        const admins = await User.findAll({ where: { role: 'ROLE_ADMIN' } });
+        const adminNotifications = admins.map(admin => ({
+          userId: admin.id,
+          title: 'Complaint Resolved',
+          message: `Complaint ${updatedComplaint.complaintId} resolved`,
+          type: 'SUCCESS',
+          isRead: false
+        }));
+        const createdAdminNotifs = await Notification.bulkCreate(adminNotifications);
+        if (io) {
+          for (const notif of createdAdminNotifs) {
+            io.to(`user_${notif.userId}`).emit('notification', notif);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error creating status update notifications:', error);
     }
 
     return res.status(200).json(updatedComplaint);
@@ -189,13 +235,6 @@ async function deleteComplaint(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_deleted', { id: parseInt(id, 10), complaintId });
-      io.emit('notification', {
-        type: 'complaint_deleted',
-        message: `🗑️ Complaint ${complaintId} has been deleted`,
-        complaintId,
-        id: parseInt(id, 10),
-        timestamp: new Date().toISOString(),
-      });
     }
 
     return res.status(200).json({ message: 'Complaint deleted successfully' });
