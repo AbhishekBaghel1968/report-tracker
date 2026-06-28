@@ -2,8 +2,10 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Users, FileText, AlertCircle, CheckCircle, ShieldAlert, BarChart3, 
-  Download, RefreshCw, LogOut, ChevronRight, Activity, Calendar, Play, Pause, Loader2 
+  Download, RefreshCw, LogOut, ChevronRight, Activity, Calendar, Play, Pause, Loader2,
+  Bell, X
 } from "lucide-react";
+import { toast } from "react-hot-toast";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useSocket } from "../context/SocketContext";
@@ -17,6 +19,7 @@ import AdminSearchFilters from "../components/AdminSearchFilters";
 import AdminAnalyticsCharts from "../components/AdminAnalyticsCharts";
 import AdminComplaintsTable from "../components/AdminComplaintsTable";
 import GeoHeatmap from "../components/GeoHeatmap";
+import AIAnalyzer from "../components/AIAnalyzer";
 
 const CATEGORIES = ["Phishing", "Online Fraud", "Identity Theft", "Social Media Crime", "Cyber Bullying", "Financial Fraud"];
 const STATUSES = ["SUBMITTED", "UNDER_REVIEW", "INVESTIGATING", "RESOLVED", "REJECTED"];
@@ -43,6 +46,39 @@ function AdminDashboard() {
   const [error, setError] = useState("");
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [downloadingReportId, setDownloadingReportId] = useState(null);
+
+  // Broadcast Alert states
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastType, setBroadcastType] = useState("INFO");
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  const handleSendBroadcast = async (e) => {
+    e.preventDefault();
+    if (!broadcastTitle || !broadcastMessage) {
+      toast.error("Title and message are required!");
+      return;
+    }
+    setBroadcasting(true);
+    try {
+      await api.post("/notifications/broadcast", {
+        title: broadcastTitle,
+        message: broadcastMessage,
+        type: broadcastType
+      });
+      setBroadcastTitle("");
+      setBroadcastMessage("");
+      setBroadcastType("INFO");
+      setShowBroadcastModal(false);
+      toast.success("Broadcast alert sent successfully!");
+    } catch (err) {
+      console.error("Broadcast failed:", err);
+      toast.error("Failed to send broadcast alert.");
+    } finally {
+      setBroadcasting(false);
+    }
+  };
 
   const handleDownloadPDF = async (complaintId) => {
     setDownloadingReportId(complaintId);
@@ -537,6 +573,38 @@ function AdminDashboard() {
             <span>Export Excel</span>
           </button>
 
+          {/* Send Broadcast Button */}
+          <button
+            onClick={() => setShowBroadcastModal(true)}
+            style={{
+              border: "none",
+              padding: "7px 12px",
+              borderRadius: "var(--radius-sm)",
+              background: "rgba(0, 240, 255, 0.15)",
+              color: "var(--accent)",
+              border: "1px solid rgba(0, 240, 255, 0.3)",
+              fontSize: "0.75rem",
+              fontWeight: "700",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 4px 10px rgba(0, 240, 255, 0.1)",
+              transition: "var(--transition)"
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = "rgba(0, 240, 255, 0.25)";
+              e.currentTarget.style.borderColor = "var(--accent)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "rgba(0, 240, 255, 0.15)";
+              e.currentTarget.style.borderColor = "rgba(0, 240, 255, 0.3)";
+            }}
+          >
+            <Bell size={12} />
+            <span>Send Broadcast</span>
+          </button>
+
         </div>
       </div>
 
@@ -747,7 +815,7 @@ function AdminDashboard() {
               </div>
 
               {selectedComplaint.evidenceFiles && selectedComplaint.evidenceFiles.length > 0 ? (
-                <div>
+                <div style={{ marginBottom: "25px" }}>
                   <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "12px" }}>Evidence Uploads</p>
                   <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                     {selectedComplaint.evidenceFiles.map((file) => (
@@ -765,9 +833,213 @@ function AdminDashboard() {
                   </div>
                 </div>
               ) : (
-                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>No files uploaded with this complaint.</p>
+                <div style={{ marginBottom: "25px" }}>
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>No files uploaded with this complaint.</p>
+                </div>
               )}
+
+              <hr style={{ border: 0, height: "1px", background: "var(--border-color)", margin: "25px 0" }} />
+
+              <div style={{ marginTop: "25px" }}>
+                <AIAnalyzer 
+                  title={selectedComplaint.title}
+                  description={selectedComplaint.description}
+                  complaintId={selectedComplaint.id}
+                  existingAnalysis={{
+                    category: selectedComplaint.aiCategory,
+                    severity: selectedComplaint.aiPriority,
+                    riskScore: selectedComplaint.aiRiskScore,
+                    keywords: (() => {
+                      try {
+                        return selectedComplaint.aiIocs ? JSON.parse(selectedComplaint.aiIocs) : [];
+                      } catch (e) {
+                        return [];
+                      }
+                    })(),
+                    recommendation: selectedComplaint.aiRecommendation || selectedComplaint.aiSummary
+                  }}
+                  onAnalysisComplete={async () => {
+                    await fetchRegistries();
+                  }}
+                />
+              </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Broadcast Modal */}
+        <AnimatePresence>
+          {showBroadcastModal && (
+            <div style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(3, 3, 7, 0.85)",
+              backdropFilter: "blur(8px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 99999,
+              padding: "20px"
+            }}>
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                style={{
+                  background: "rgba(10, 10, 18, 0.98)",
+                  border: "1px solid rgba(0, 240, 255, 0.2)",
+                  borderRadius: "var(--radius-md, 12px)",
+                  padding: "30px",
+                  maxWidth: "500px",
+                  width: "100%",
+                  boxShadow: "0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(0, 240, 255, 0.05)"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: "800", color: "var(--accent)" }}>
+                    📣 Create Admin Broadcast
+                  </h3>
+                  <button
+                    onClick={() => setShowBroadcastModal(false)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--text-secondary)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSendBroadcast} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px", fontWeight: "600" }}>
+                      BROADCAST TITLE
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="E.g., System Maintenance Schedule"
+                      value={broadcastTitle}
+                      onChange={(e) => setBroadcastTitle(e.target.value)}
+                      style={{
+                        width: "100%",
+                        background: "rgba(0, 0, 0, 0.5)",
+                        border: "1px solid var(--border-color)",
+                        borderRadius: "6px",
+                        padding: "10px 14px",
+                        color: "var(--text-primary)",
+                        fontSize: "0.85rem",
+                        outline: "none"
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px", fontWeight: "600" }}>
+                      ALERT LEVEL
+                    </label>
+                    <select
+                      value={broadcastType}
+                      onChange={(e) => setBroadcastType(e.target.value)}
+                      style={{
+                        width: "100%",
+                        background: "rgba(0, 0, 0, 0.5)",
+                        border: "1px solid var(--border-color)",
+                        borderRadius: "6px",
+                        padding: "10px 14px",
+                        color: "var(--text-primary)",
+                        fontSize: "0.85rem",
+                        outline: "none"
+                      }}
+                    >
+                      <option value="INFO">Information (Blue)</option>
+                      <option value="SUCCESS">Success (Green)</option>
+                      <option value="WARNING">Warning (Amber)</option>
+                      <option value="ERROR">Critical/Alert (Red)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px", fontWeight: "600" }}>
+                      BROADCAST MESSAGE
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      placeholder="Enter broadcast details for all citizens and officers..."
+                      value={broadcastMessage}
+                      onChange={(e) => setBroadcastMessage(e.target.value)}
+                      style={{
+                        width: "100%",
+                        background: "rgba(0, 0, 0, 0.5)",
+                        border: "1px solid var(--border-color)",
+                        borderRadius: "6px",
+                        padding: "10px 14px",
+                        color: "var(--text-primary)",
+                        fontSize: "0.85rem",
+                        outline: "none",
+                        resize: "none"
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", gap: "12px", marginTop: "10px", justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowBroadcastModal(false)}
+                      style={{
+                        padding: "10px 20px",
+                        background: "rgba(255, 255, 255, 0.05)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border-color)",
+                        borderRadius: "var(--radius-sm, 4px)",
+                        cursor: "pointer",
+                        fontSize: "0.85rem",
+                        fontWeight: "600",
+                        width: "auto"
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={broadcasting}
+                      style={{
+                        padding: "10px 24px",
+                        background: "var(--primary)",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "var(--radius-sm, 4px)",
+                        cursor: "pointer",
+                        fontSize: "0.85rem",
+                        fontWeight: "700",
+                        width: "auto",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        boxShadow: "0 4px 15px var(--primary-glow)"
+                      }}
+                    >
+                      {broadcasting ? (
+                        <>
+                          <Loader2 size={16} className="spin-animation" style={{ animation: "spin 1s linear infinite" }} />
+                          <span>Broadcasting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Emit Broadcast</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
       </div>

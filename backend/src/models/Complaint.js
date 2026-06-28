@@ -102,6 +102,11 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: true,
     field: 'fraud_reasons',
   },
+  aiRecommendation: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'ai_recommendation',
+  },
 }, {
   tableName: 'complaints',
 });

@@ -9,6 +9,7 @@ import NotificationBell from "./NotificationBell";
 
 function Layout() {
   const { user, logout } = useAuth();
+  const { unreadCount } = useSocket();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -198,6 +199,34 @@ function Layout() {
             >
               <Search size={18} />
               <span>Track Status</span>
+            </NavLink>
+
+            <NavLink 
+              to="/notifications" 
+              className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`}
+              onClick={() => setMobileOpen(false)}
+              style={{ display: "flex", alignItems: "center", width: "100%" }}
+            >
+              <Bell size={18} />
+              <span>Alert Center</span>
+              {unreadCount > 0 && (
+                <span style={{
+                  marginLeft: "auto",
+                  background: "var(--danger)",
+                  color: "#ffffff",
+                  fontSize: "0.7rem",
+                  fontWeight: "700",
+                  borderRadius: "50%",
+                  width: "16px",
+                  height: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 0 6px var(--danger)"
+                }}>
+                  {unreadCount}
+                </span>
+              )}
             </NavLink>
 
             <NavLink 

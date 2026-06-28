@@ -1,6 +1,7 @@
 const { User, Complaint, EvidenceFile, Notification, AuditLog } = require('../models');
 const { Op } = require('sequelize');
 const { createTimelineEvent } = require('../services/timelineService');
+const emailService = require('../services/emailService');
 
 /**
  * Fetch total statistics for the SOC Dashboard.
@@ -178,6 +179,29 @@ async function assignComplaint(req, res) {
           io.to(`user_${officerId}`).emit('notification', officerNotif);
         }
 
+        // Send Email assignment alert to the officer
+        try {
+          await emailService.sendCaseAssignmentAlert(officer, complaint);
+        } catch (mailErr) {
+          console.error('Failed to send officer assignment email:', mailErr);
+        }
+
+        // Save notification in DB for submitting citizen and emit to their room
+        try {
+          const citizenNotif = await Notification.create({
+            userId: complaint.userId,
+            title: 'Officer Assigned',
+            message: `Officer ${officerName} has been assigned to investigate your complaint (${complaint.complaintId})`,
+            type: 'INFO',
+            isRead: false
+          });
+          if (io) {
+            io.to(`user_${complaint.userId}`).emit('notification', citizenNotif);
+          }
+        } catch (citNotifErr) {
+          console.error('Failed to notify citizen of officer assignment:', citNotifErr);
+        }
+
         // Log assignment to AuditLog
         try {
           await AuditLog.create({
@@ -273,6 +297,29 @@ async function assignComplaintById(req, res) {
         });
         if (io) {
           io.to(`user_${officerId}`).emit('notification', officerNotif);
+        }
+
+        // Send Email assignment alert to the officer
+        try {
+          await emailService.sendCaseAssignmentAlert(officer, complaint);
+        } catch (mailErr) {
+          console.error('Failed to send officer assignment email:', mailErr);
+        }
+
+        // Save notification in DB for submitting citizen and emit to their room
+        try {
+          const citizenNotif = await Notification.create({
+            userId: complaint.userId,
+            title: 'Officer Assigned',
+            message: `Officer ${officerName} has been assigned to investigate your complaint (${complaint.complaintId})`,
+            type: 'INFO',
+            isRead: false
+          });
+          if (io) {
+            io.to(`user_${complaint.userId}`).emit('notification', citizenNotif);
+          }
+        } catch (citNotifErr) {
+          console.error('Failed to notify citizen of officer assignment:', citNotifErr);
         }
       } catch (error) {
         console.error('Error creating assignment notification:', error);

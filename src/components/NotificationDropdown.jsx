@@ -1,5 +1,6 @@
 import { useSocket } from "../context/SocketContext";
 import { Trash2, Check, CheckCheck, BellOff, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 function NotificationDropdown({ onClose }) {
   const {
@@ -253,6 +254,31 @@ function NotificationDropdown({ onClose }) {
             </div>
           ))
         )}
+      </div>
+      
+      {/* Footer view all link */}
+      <div style={{
+        padding: "12px",
+        textAlign: "center",
+        borderTop: "1px solid var(--border-color)",
+        background: "rgba(0,0,0,0.25)"
+      }}>
+        <Link 
+          to="/notifications" 
+          onClick={onClose} 
+          style={{ 
+            color: "var(--accent)", 
+            fontSize: "0.82rem", 
+            fontWeight: "700", 
+            textDecoration: "none", 
+            display: "inline-flex", 
+            alignItems: "center", 
+            gap: "6px",
+            letterSpacing: "0.02em"
+          }}
+        >
+          Open Alert Center →
+        </Link>
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ import Reports from "./pages/Reports";
 import TrackStatus from "./pages/TrackStatus";
 import Unauthorized from "./pages/Unauthorized";
 import Layout from "./components/Layout";
+import NotificationPanel from "./components/NotificationPanel";
 import "./App.css";
 
 // Route Guard for general authenticated users (e.g. Profile)
@@ -180,6 +181,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/notifications"
+                element={
+                  <ProtectedRoute>
+                    <NotificationPanel />
                   </ProtectedRoute>
                 }
               />

@@ -23,6 +23,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const timelineRoutes = require('./routes/timelineRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const geoRoutes = require('./routes/geoRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -90,6 +91,7 @@ app.use('/api/officer', officerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/threat-intel', threatIntelRoutes);
 app.use('/api/ai/chatbot', chatbotRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/timeline', timelineRoutes);
 app.use('/api/reports', reportRoutes);
@@ -257,7 +259,8 @@ async function startServer() {
       { name: 'ai_risk_score', type: 'INT' },
       { name: 'ai_iocs', type: 'TEXT' },
       { name: 'fraud_risk_level', type: 'VARCHAR(255)' },
-      { name: 'fraud_reasons', type: 'TEXT' }
+      { name: 'fraud_reasons', type: 'TEXT' },
+      { name: 'ai_recommendation', type: 'TEXT' }
     ];
 
     for (const col of aiColumns) {
@@ -294,6 +297,13 @@ async function startServer() {
       } catch (err) {
         // Column already exists
       }
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE notifications ADD COLUMN is_archived TINYINT(1) DEFAULT 0;");
+      console.log('Database: Added is_archived column to notifications table');
+    } catch (err) {
+      // Ignored if column already exists or table doesn't exist yet (sync will create it)
     }
 
     // Sync database models

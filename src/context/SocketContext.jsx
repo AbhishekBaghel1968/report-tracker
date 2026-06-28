@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "./AuthContext";
 import { initiateSocketConnection } from "../services/socket";
@@ -8,18 +8,66 @@ const SocketContext = createContext(null);
 
 export const useSocket = () => useContext(SocketContext);
 
+// Dynamic beep synthesizer using Web Audio API
+const playBeep = () => {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.type = "sine";
+    // Cyber notification beep tone (D8 down to D6 slider)
+    oscillator.frequency.setValueAtTime(987.77, audioCtx.currentTime); // B5
+    oscillator.frequency.exponentialRampToValueAtTime(493.88, audioCtx.currentTime + 0.12); // B4
+
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.12);
+  } catch (e) {
+    console.warn("Failed to play audio alert synthesizer:", e);
+  }
+};
+
 export const SocketProvider = ({ children }) => {
   const { user, token } = useAuth();
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [soundMuted, setSoundMuted] = useState(
+    localStorage.getItem("sentinel_sound_muted") === "true"
+  );
+  
+  const soundMutedRef = useRef(soundMuted);
+
+  useEffect(() => {
+    soundMutedRef.current = soundMuted;
+  }, [soundMuted]);
+
+  const toggleSound = () => {
+    const newVal = !soundMuted;
+    setSoundMuted(newVal);
+    localStorage.setItem("sentinel_sound_muted", String(newVal));
+    toast.success(newVal ? "Sound alerts muted" : "Sound alerts enabled", {
+      style: {
+        background: "rgba(10, 10, 18, 0.95)",
+        color: "var(--text-primary)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+      }
+    });
+  };
 
   // Fetch initial notification history
   const fetchNotifications = async () => {
     try {
       const response = await api.get("/notifications");
       setNotifications(response.data);
-      setUnreadCount(response.data.filter(n => !n.isRead).length);
+      // Unread count excludes archived messages
+      setUnreadCount(response.data.filter(n => !n.isRead && !n.isArchived).length);
     } catch (err) {
       console.error("Failed to fetch notifications list:", err);
     }
@@ -46,9 +94,18 @@ export const SocketProvider = ({ children }) => {
 
     socketInstance.on("notification", (notification) => {
       setNotifications((prev) => [notification, ...prev]);
-      setUnreadCount((c) => c + 1);
+      
+      // Increment unread count only if not archived
+      if (!notification.isArchived) {
+        setUnreadCount((c) => c + 1);
+      }
 
-      // Play custom/browser audio alert or show toast alert
+      // Play Dynamic Synthesized Beep if not muted
+      if (!soundMutedRef.current) {
+        playBeep();
+      }
+
+      // Custom cyber-themed toast display
       const typeColor = notification.type === "SUCCESS" ? "var(--success)" :
                         notification.type === "ERROR" ? "var(--danger)" :
                         notification.type === "WARNING" ? "var(--warning)" :
@@ -113,7 +170,7 @@ export const SocketProvider = ({ children }) => {
 
   const markAsRead = async (id) => {
     try {
-      await api.put(`/notifications/${id}/read`);
+      await api.put(`/notifications/read/${id}`);
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, isRead: true } : n)
       );
@@ -123,12 +180,27 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  const archiveNotification = async (id) => {
+    try {
+      await api.put(`/notifications/archive/${id}`);
+      setNotifications(prev => {
+        const target = prev.find(n => n.id === id);
+        if (target && !target.isRead && !target.isArchived) {
+          setUnreadCount(c => Math.max(0, c - 1));
+        }
+        return prev.map(n => n.id === id ? { ...n, isArchived: true, isRead: true } : n);
+      });
+    } catch (err) {
+      console.error("Failed to archive notification:", err);
+    }
+  };
+
   const deleteNotification = async (id) => {
     try {
       await api.delete(`/notifications/${id}`);
       setNotifications(prev => {
         const target = prev.find(n => n.id === id);
-        if (target && !target.isRead) {
+        if (target && !target.isRead && !target.isArchived) {
           setUnreadCount(c => Math.max(0, c - 1));
         }
         return prev.filter(n => n.id !== id);
@@ -140,10 +212,7 @@ export const SocketProvider = ({ children }) => {
 
   const markAllAsRead = async () => {
     try {
-      const unreadList = notifications.filter(n => !n.isRead);
-      if (unreadList.length > 0) {
-        await Promise.all(unreadList.map(n => api.put(`/notifications/${n.id}/read`)));
-      }
+      await api.put(`/notifications/read-all`);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch (err) {
@@ -153,9 +222,7 @@ export const SocketProvider = ({ children }) => {
 
   const clearNotifications = async () => {
     try {
-      if (notifications.length > 0) {
-        await Promise.all(notifications.map(n => api.delete(`/notifications/${n.id}`)));
-      }
+      await api.delete(`/notifications/clear-all`);
       setNotifications([]);
       setUnreadCount(0);
     } catch (err) {
@@ -164,7 +231,18 @@ export const SocketProvider = ({ children }) => {
   };
 
   return (
-    <SocketContext.Provider value={{ socket, notifications, unreadCount, markAsRead, deleteNotification, markAllAsRead, clearNotifications }}>
+    <SocketContext.Provider value={{ 
+      socket, 
+      notifications, 
+      unreadCount, 
+      soundMuted, 
+      toggleSound, 
+      markAsRead, 
+      archiveNotification, 
+      deleteNotification, 
+      markAllAsRead, 
+      clearNotifications 
+    }}>
       {children}
     </SocketContext.Provider>
   );

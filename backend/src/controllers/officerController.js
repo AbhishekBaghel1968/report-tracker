@@ -207,34 +207,46 @@ async function updateCaseStatus(req, res) {
       }
     }
 
-    // Create notifications for citizen & admin if resolved
+    // Create notifications for citizen & admin
     try {
       const statusUpper = status.toUpperCase();
       const isResolved = statusUpper === 'RESOLVED';
-      
-      const citizenMsg = isResolved
-        ? `Complaint ${updatedComplaint.complaintId} resolved`
-        : `Your complaint ${updatedComplaint.complaintId} status updated to ${statusUpper.replace('_', ' ')}`;
-      
-      const citizenNotif = await Notification.create({
-        userId: updatedComplaint.userId,
-        title: isResolved ? 'Complaint Resolved' : 'Complaint Status Updated',
-        message: citizenMsg,
-        type: isResolved ? 'SUCCESS' : 'INFO',
-        isRead: false
-      });
-      
-      if (io) {
-        io.to(`user_${updatedComplaint.userId}`).emit('notification', citizenNotif);
-      }
+      const isRejected = statusUpper === 'REJECTED';
+      const isFinished = isResolved || isRejected;
 
-      if (isResolved) {
+      if (isFinished) {
+        // 1. Trigger "Investigation Completed" notification for citizen
+        const investigationNotif = await Notification.create({
+          userId: updatedComplaint.userId,
+          title: 'Investigation Completed',
+          message: `The cyber investigations for complaint ${updatedComplaint.complaintId} have been completed.`,
+          type: isResolved ? 'SUCCESS' : 'WARNING',
+          isRead: false
+        });
+
+        // 2. Trigger "Complaint Resolved / Rejected" notification for citizen
+        const finalStatusNotif = await Notification.create({
+          userId: updatedComplaint.userId,
+          title: isResolved ? 'Complaint Resolved' : 'Complaint Rejected',
+          message: isResolved 
+            ? `Your complaint ${updatedComplaint.complaintId} has been successfully resolved.`
+            : `Your complaint ${updatedComplaint.complaintId} has been rejected.`,
+          type: isResolved ? 'SUCCESS' : 'ERROR',
+          isRead: false
+        });
+
+        if (io) {
+          io.to(`user_${updatedComplaint.userId}`).emit('notification', investigationNotif);
+          io.to(`user_${updatedComplaint.userId}`).emit('notification', finalStatusNotif);
+        }
+
+        // Notify Admins about the closure
         const admins = await User.findAll({ where: { role: 'ROLE_ADMIN' } });
         const adminNotifications = admins.map(admin => ({
           userId: admin.id,
-          title: 'Complaint Resolved',
-          message: `Complaint ${updatedComplaint.complaintId} resolved`,
-          type: 'SUCCESS',
+          title: isResolved ? 'Complaint Resolved' : 'Complaint Rejected',
+          message: `Complaint ${updatedComplaint.complaintId} has been closed as ${statusUpper}`,
+          type: isResolved ? 'SUCCESS' : 'ERROR',
           isRead: false
         }));
         const createdAdminNotifs = await Notification.bulkCreate(adminNotifications);
@@ -242,6 +254,18 @@ async function updateCaseStatus(req, res) {
           for (const notif of createdAdminNotifs) {
             io.to(`user_${notif.userId}`).emit('notification', notif);
           }
+        }
+      } else {
+        // Regular status updates (UNDER_REVIEW, INVESTIGATING)
+        const citizenNotif = await Notification.create({
+          userId: updatedComplaint.userId,
+          title: 'Complaint Status Updated',
+          message: `Your complaint ${updatedComplaint.complaintId} status has been updated to ${statusUpper.replace('_', ' ')}`,
+          type: 'INFO',
+          isRead: false
+        });
+        if (io) {
+          io.to(`user_${updatedComplaint.userId}`).emit('notification', citizenNotif);
         }
       }
     } catch (error) {

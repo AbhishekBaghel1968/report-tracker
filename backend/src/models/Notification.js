@@ -31,6 +31,12 @@ const Notification = sequelize.define('Notification', {
     defaultValue: false,
     field: 'is_read',
   },
+  isArchived: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    field: 'is_archived',
+  },
 }, {
   tableName: 'notifications',
   timestamps: true, // We want createdAt and updatedAt for notifications

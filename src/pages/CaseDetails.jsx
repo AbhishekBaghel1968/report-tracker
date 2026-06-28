@@ -7,6 +7,7 @@ import {
 import api from "../services/api";
 import { motion } from "framer-motion";
 import SecureChatPanel from "../components/SecureChatPanel";
+import AIAnalyzer from "../components/AIAnalyzer";
 
 function CaseDetails() {
   const { id } = useParams();
@@ -483,77 +484,25 @@ function CaseDetails() {
         <div style={{ display: "flex", flexDirection: "column", gap: "30px" }}>
           
           {/* AI Security Diagnostics and Forensics Scanner */}
-          {complaint.aiRiskScore && (
-            <div style={{
-              background: "rgba(10, 10, 18, 0.95)",
-              border: "1px solid var(--glass-border)",
-              borderRadius: "var(--radius-lg)",
-              padding: "25px",
-              boxShadow: "var(--shadow-md)"
-            }}>
-              <h3 style={{ fontSize: "1.05rem", fontWeight: "700", color: "var(--text-primary)", marginBottom: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Bot size={16} color="var(--warning)" style={{ filter: "drop-shadow(0 0 4px rgba(245, 158, 11, 0.4))" }} /> AI Security Forensics
-              </h3>
-              
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "0.85rem" }}>
-                <div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>Risk Diagnostics Score</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "4px" }}>
-                    <div style={{ flex: 1, background: "rgba(255,255,255,0.05)", height: "8px", borderRadius: "100px", overflow: "hidden" }}>
-                      <div style={{
-                        width: `${complaint.aiRiskScore}%`,
-                        height: "100%",
-                        background: complaint.aiRiskScore >= 75 ? "var(--danger)" : complaint.aiRiskScore >= 45 ? "var(--warning)" : "var(--success)",
-                        boxShadow: `0 0 8px ${complaint.aiRiskScore >= 75 ? "var(--danger)" : complaint.aiRiskScore >= 45 ? "var(--warning)" : "var(--success)"}`
-                      }} />
-                    </div>
-                    <span style={{ fontWeight: "800", color: complaint.aiRiskScore >= 75 ? "var(--danger)" : complaint.aiRiskScore >= 45 ? "var(--warning)" : "var(--success)" }}>
-                      {complaint.aiRiskScore}%
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>AI Predicted Category</span>
-                  <span style={{ color: "var(--text-primary)", fontWeight: "700", fontSize: "0.9rem" }}>{complaint.aiCategory || "General"}</span>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>AI Fraud Flag Rating</span>
-                  <span style={{
-                    color: complaint.fraudRiskLevel === "HIGH" ? "var(--danger)" : complaint.fraudRiskLevel === "MEDIUM" ? "var(--warning)" : "var(--success)",
-                    fontWeight: "800"
-                  }}>
-                    {complaint.fraudRiskLevel || "LOW"}
-                  </span>
-                  <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: "1.4" }}>
-                    {complaint.fraudReasons || "N/A"}
-                  </p>
-                </div>
-
-                {complaint.aiIocs && JSON.parse(complaint.aiIocs).length > 0 && (
-                  <div>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Extracted Threat Indicators (IOCs)</span>
-                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                      {JSON.parse(complaint.aiIocs).map((ioc, index) => (
-                        <span key={index} style={{
-                          fontFamily: "monospace",
-                          fontSize: "0.7rem",
-                          color: "var(--accent)",
-                          background: "rgba(0, 240, 255, 0.05)",
-                          border: "1px solid rgba(0, 240, 255, 0.15)",
-                          padding: "2px 8px",
-                          borderRadius: "4px"
-                        }}>
-                          {ioc}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          <AIAnalyzer 
+            title={complaint.title}
+            description={complaint.description}
+            complaintId={complaint.id}
+            existingAnalysis={{
+              category: complaint.aiCategory,
+              severity: complaint.aiPriority,
+              riskScore: complaint.aiRiskScore,
+              keywords: (() => {
+                try {
+                  return complaint.aiIocs ? JSON.parse(complaint.aiIocs) : [];
+                } catch(e) {
+                  return [];
+                }
+              })(),
+              recommendation: complaint.aiRecommendation || complaint.aiSummary
+            }}
+            onAnalysisComplete={fetchComplaintDetails}
+          />
 
           {/* Secure Citizen-Officer Link Chat Panel */}
           <SecureChatPanel complaintId={id} role="officer" />
