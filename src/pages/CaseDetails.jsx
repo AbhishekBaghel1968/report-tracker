@@ -2,10 +2,11 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, Shield, Clock, AlertTriangle, User, Calendar, 
-  MapPin, Send, UploadCloud, Paperclip, CheckCircle, FileText, Loader2, Trash2
+  MapPin, Send, UploadCloud, Paperclip, CheckCircle, FileText, Loader2, Trash2, Bot, MessageSquare, Download
 } from "lucide-react";
 import api from "../services/api";
 import { motion } from "framer-motion";
+import SecureChatPanel from "../components/SecureChatPanel";
 
 function CaseDetails() {
   const { id } = useParams();
@@ -14,6 +15,31 @@ function CaseDetails() {
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!complaint) return;
+    setDownloading(true);
+    try {
+      const response = await api.get(`/reports/${complaint.complaintId}/pdf`, {
+        responseType: "blob"
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${complaint.complaintId}-report.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading PDF report", err);
+      alert("Failed to download PDF report. Ensure you have proper authorization.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   // Officer inputs
   const [noteText, setNoteText] = useState("");
@@ -24,6 +50,20 @@ function CaseDetails() {
   const fileInputRef = useRef(null);
 
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [timeline, setTimeline] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
+  const fetchTimeline = async () => {
+    try {
+      setTimelineLoading(true);
+      const response = await api.get(`/complaints/${id}/timeline`);
+      setTimeline(response.data);
+    } catch (err) {
+      console.error("Failed to load timeline telemetry:", err);
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
 
   const fetchComplaintDetails = async () => {
     try {
@@ -31,6 +71,7 @@ function CaseDetails() {
       setError("");
       const response = await api.get(`/officer/cases/${id}`);
       setComplaint(response.data);
+      await fetchTimeline();
     } catch (err) {
       console.error("Error fetching complaint details:", err);
       setError(err.response?.data?.error || "Complaint details could not be retrieved. Ensure it is assigned to you.");
@@ -42,6 +83,7 @@ function CaseDetails() {
   useEffect(() => {
     fetchComplaintDetails();
   }, [id]);
+
 
   const handleStatusChange = async (newStatus) => {
     try {
@@ -55,6 +97,7 @@ function CaseDetails() {
       setUpdatingStatus(false);
     }
   };
+
 
   const handleAddNote = async (e) => {
     e.preventDefault();
@@ -194,9 +237,35 @@ function CaseDetails() {
                 <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", fontWeight: "700" }}>Case ID: {complaint.complaintId}</span>
                 <h2 style={{ fontSize: "1.45rem", fontWeight: "700", color: "var(--text-primary)", marginTop: "4px" }}>{complaint.title}</h2>
               </div>
-              <span className={`badge ${getStatusBadgeClass(complaint.status)}`} style={{ fontSize: "0.85rem", padding: "6px 14px" }}>
-                {complaint.status.replace("_", " ")}
-              </span>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={downloading}
+                  style={{
+                    padding: "6px 14px",
+                    background: "rgba(0, 240, 255, 0.06)",
+                    border: "1px solid rgba(0, 240, 255, 0.2)",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--accent)",
+                    fontSize: "0.85rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    transition: "var(--transition)",
+                    width: "auto"
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = "rgba(0, 240, 255, 0.15)"}
+                  onMouseOut={(e) => e.currentTarget.style.background = "rgba(0, 240, 255, 0.06)"}
+                >
+                  <Download size={14} color="var(--accent)" />
+                  <span>{downloading ? "Exporting..." : "Export PDF"}</span>
+                </button>
+                <span className={`badge ${getStatusBadgeClass(complaint.status)}`} style={{ fontSize: "0.85rem", padding: "6px 14px" }}>
+                  {complaint.status.replace("_", " ")}
+                </span>
+              </div>
             </div>
 
             {/* Case Details Attributes Grid */}
@@ -271,9 +340,14 @@ function CaseDetails() {
                         borderRadius: "8px"
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <FileText size={16} color="var(--primary)" />
-                        <span style={{ fontSize: "0.85rem", color: "var(--text-primary)", fontWeight: "500" }}>{file.fileName}</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <FileText size={16} color="var(--primary)" />
+                          <span style={{ fontSize: "0.85rem", color: "var(--text-primary)", fontWeight: "500" }}>{file.fileName}</span>
+                        </div>
+                        <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)", fontFamily: "monospace" }}>
+                          SHA-256: {file.fileHash || 'Forensics Pending'} {file.fileSize ? `| Size: ${(file.fileSize / 1024).toFixed(1)} KB` : ''}
+                        </span>
                       </div>
                       <a 
                         href={`http://localhost:8080/api/files/${file.filePath}`}
@@ -310,9 +384,14 @@ function CaseDetails() {
                         borderRadius: "8px"
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <FileText size={16} color="var(--accent)" />
-                        <span style={{ fontSize: "0.85rem", color: "var(--text-primary)", fontWeight: "500" }}>{file.fileName}</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <FileText size={16} color="var(--accent)" />
+                          <span style={{ fontSize: "0.85rem", color: "var(--text-primary)", fontWeight: "500" }}>{file.fileName}</span>
+                        </div>
+                        <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)", fontFamily: "monospace" }}>
+                          SHA-256: {file.fileHash || 'Forensics Pending'} {file.fileSize ? `| Size: ${(file.fileSize / 1024).toFixed(1)} KB` : ''}
+                        </span>
                       </div>
                       <a 
                         href={`http://localhost:8080/api/files/${file.filePath}`}
@@ -328,9 +407,10 @@ function CaseDetails() {
                 </div>
               )}
             </div>
+
           </div>
 
-          {/* Investigation History Logs */}
+          {/* Unified Timeline logs */}
           <div style={{
             background: "var(--glass-bg)",
             border: "1px solid var(--glass-border)",
@@ -339,12 +419,17 @@ function CaseDetails() {
             boxShadow: "var(--shadow-md)"
           }}>
             <h3 style={{ fontSize: "1.15rem", fontWeight: "700", color: "var(--text-primary)", marginBottom: "25px", display: "flex", alignItems: "center", gap: "10px" }}>
-              <Clock size={18} color="var(--primary)" /> Investigation Log Timeline
+              <Clock size={18} color="var(--accent)" /> Case Investigation Timeline
             </h3>
 
-            {(!complaint.officerNotes || complaint.officerNotes.length === 0) ? (
+            {timelineLoading && timeline.length === 0 ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                <Loader2 size={24} className="spin-animation" style={{ animation: "spin 1s linear infinite", color: "var(--accent)" }} />
+                <span style={{ marginLeft: "10px" }}>Decrypting timeline telemetries...</span>
+              </div>
+            ) : timeline.length === 0 ? (
               <div style={{ color: "var(--text-muted)", fontSize: "0.9rem", textAlign: "center", padding: "20px" }}>
-                No audit logs compiled. Submit an investigation note on the right to start.
+                No active audit timeline logs generated yet.
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "20px", position: "relative", paddingLeft: "15px" }}>
@@ -358,8 +443,8 @@ function CaseDetails() {
                   background: "rgba(255, 255, 255, 0.05)"
                 }} />
 
-                {complaint.officerNotes.map((note) => (
-                  <div key={note.id} style={{ position: "relative" }}>
+                {timeline.map((evt) => (
+                  <div key={evt.id} style={{ position: "relative" }}>
                     {/* Timeline bullet */}
                     <div style={{
                       position: "absolute",
@@ -368,8 +453,9 @@ function CaseDetails() {
                       width: "10px",
                       height: "10px",
                       borderRadius: "50%",
-                      background: "var(--primary)",
-                      border: "2px solid var(--bg-primary)"
+                      background: evt.type === "AI_ASSESSMENT" ? "var(--warning)" : "var(--primary)",
+                      border: "2px solid var(--bg-primary)",
+                      boxShadow: evt.type === "AI_ASSESSMENT" ? "0 0 6px var(--warning)" : "none"
                     }} />
 
                     <div style={{
@@ -379,10 +465,10 @@ function CaseDetails() {
                       borderRadius: "var(--radius-sm)"
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "8px", fontSize: "0.8rem" }}>
-                        <span style={{ color: "var(--accent)", fontWeight: "600" }}>Logged by: {note.officerName || "Security Officer"}</span>
-                        <span style={{ color: "var(--text-muted)" }}>{new Date(note.createdAt).toLocaleString()}</span>
+                        <span style={{ color: "var(--accent)", fontWeight: "700" }}>{evt.title}</span>
+                        <span style={{ color: "var(--text-muted)" }}>{new Date(evt.timestamp).toLocaleString()}</span>
                       </div>
-                      <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: "1.5" }}>{note.note}</p>
+                      <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", lineHeight: "1.5" }}>{evt.description}</p>
                     </div>
                   </div>
                 ))}
@@ -390,10 +476,88 @@ function CaseDetails() {
             )}
           </div>
 
+
         </div>
 
         {/* Right Column: Actions & Citizen Profile */}
         <div style={{ display: "flex", flexDirection: "column", gap: "30px" }}>
+          
+          {/* AI Security Diagnostics and Forensics Scanner */}
+          {complaint.aiRiskScore && (
+            <div style={{
+              background: "rgba(10, 10, 18, 0.95)",
+              border: "1px solid var(--glass-border)",
+              borderRadius: "var(--radius-lg)",
+              padding: "25px",
+              boxShadow: "var(--shadow-md)"
+            }}>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: "700", color: "var(--text-primary)", marginBottom: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Bot size={16} color="var(--warning)" style={{ filter: "drop-shadow(0 0 4px rgba(245, 158, 11, 0.4))" }} /> AI Security Forensics
+              </h3>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "0.85rem" }}>
+                <div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>Risk Diagnostics Score</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "4px" }}>
+                    <div style={{ flex: 1, background: "rgba(255,255,255,0.05)", height: "8px", borderRadius: "100px", overflow: "hidden" }}>
+                      <div style={{
+                        width: `${complaint.aiRiskScore}%`,
+                        height: "100%",
+                        background: complaint.aiRiskScore >= 75 ? "var(--danger)" : complaint.aiRiskScore >= 45 ? "var(--warning)" : "var(--success)",
+                        boxShadow: `0 0 8px ${complaint.aiRiskScore >= 75 ? "var(--danger)" : complaint.aiRiskScore >= 45 ? "var(--warning)" : "var(--success)"}`
+                      }} />
+                    </div>
+                    <span style={{ fontWeight: "800", color: complaint.aiRiskScore >= 75 ? "var(--danger)" : complaint.aiRiskScore >= 45 ? "var(--warning)" : "var(--success)" }}>
+                      {complaint.aiRiskScore}%
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>AI Predicted Category</span>
+                  <span style={{ color: "var(--text-primary)", fontWeight: "700", fontSize: "0.9rem" }}>{complaint.aiCategory || "General"}</span>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block" }}>AI Fraud Flag Rating</span>
+                  <span style={{
+                    color: complaint.fraudRiskLevel === "HIGH" ? "var(--danger)" : complaint.fraudRiskLevel === "MEDIUM" ? "var(--warning)" : "var(--success)",
+                    fontWeight: "800"
+                  }}>
+                    {complaint.fraudRiskLevel || "LOW"}
+                  </span>
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: "1.4" }}>
+                    {complaint.fraudReasons || "N/A"}
+                  </p>
+                </div>
+
+                {complaint.aiIocs && JSON.parse(complaint.aiIocs).length > 0 && (
+                  <div>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Extracted Threat Indicators (IOCs)</span>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {JSON.parse(complaint.aiIocs).map((ioc, index) => (
+                        <span key={index} style={{
+                          fontFamily: "monospace",
+                          fontSize: "0.7rem",
+                          color: "var(--accent)",
+                          background: "rgba(0, 240, 255, 0.05)",
+                          border: "1px solid rgba(0, 240, 255, 0.15)",
+                          padding: "2px 8px",
+                          borderRadius: "4px"
+                        }}>
+                          {ioc}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Secure Citizen-Officer Link Chat Panel */}
+          <SecureChatPanel complaintId={id} role="officer" />
+
           
           {/* Status Settings panel */}
           <div style={{

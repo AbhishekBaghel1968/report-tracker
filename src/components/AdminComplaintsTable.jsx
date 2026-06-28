@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Eye, UserCheck, CheckCircle2, Trash2, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Eye, UserCheck, CheckCircle2, Trash2, ChevronLeft, ChevronRight, X, Download, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-function AdminComplaintsTable({ complaints, officers, onView, onResolve, onDelete, onAssign, currentUser }) {
+function AdminComplaintsTable({ complaints, officers, onView, onResolve, onDelete, onAssign, currentUser, onDownloadPDF, downloadingReportId }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [assignTarget, setAssignTarget] = useState(null);
@@ -159,6 +159,33 @@ function AdminComplaintsTable({ complaints, officers, onView, onResolve, onDelet
                             title="Audit Case Log"
                           >
                             <Eye size={16} />
+                          </button>
+
+                          {/* Export PDF Button */}
+                          <button
+                            onClick={() => onDownloadPDF(c.complaintId)}
+                            disabled={downloadingReportId === c.complaintId}
+                            style={{
+                              border: "none",
+                              background: "rgba(245, 158, 11, 0.06)",
+                              color: "#f59e0b",
+                              cursor: "pointer",
+                              padding: "6px",
+                              borderRadius: "4px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              transition: "var(--transition)"
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = "rgba(245, 158, 11, 0.15)"}
+                            onMouseOut={(e) => e.currentTarget.style.background = "rgba(245, 158, 11, 0.06)"}
+                            title="Download PDF Report"
+                          >
+                            {downloadingReportId === c.complaintId ? (
+                              <Loader2 size={16} className="spin-animation" style={{ animation: "spin 1s linear infinite" }} />
+                            ) : (
+                              <Download size={16} />
+                            )}
                           </button>
                           
                           {/* Assign Button */}

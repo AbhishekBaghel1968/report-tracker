@@ -16,6 +16,7 @@ import * as XLSX from "xlsx";
 import AdminSearchFilters from "../components/AdminSearchFilters";
 import AdminAnalyticsCharts from "../components/AdminAnalyticsCharts";
 import AdminComplaintsTable from "../components/AdminComplaintsTable";
+import GeoHeatmap from "../components/GeoHeatmap";
 
 const CATEGORIES = ["Phishing", "Online Fraud", "Identity Theft", "Social Media Crime", "Cyber Bullying", "Financial Fraud"];
 const STATUSES = ["SUBMITTED", "UNDER_REVIEW", "INVESTIGATING", "RESOLVED", "REJECTED"];
@@ -35,11 +36,36 @@ function AdminDashboard() {
   const [statusData, setStatusData] = useState([]);
   const [heatmapData, setHeatmapData] = useState([]);
   const [hotspotData, setHotspotData] = useState([]);
+  const [geoData, setGeoData] = useState([]);
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [selectedComplaint, setSelectedComplaint] = useState(null);
+  const [downloadingReportId, setDownloadingReportId] = useState(null);
+
+  const handleDownloadPDF = async (complaintId) => {
+    setDownloadingReportId(complaintId);
+    try {
+      const response = await api.get(`/reports/${complaintId}/pdf`, {
+        responseType: "blob"
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${complaintId}-report.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading PDF report", err);
+      alert("Failed to download PDF report. Ensure you have proper authorization.");
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
 
   // Filters & Controls
   const [dateFilter, setDateFilter] = useState("1y");
@@ -57,20 +83,30 @@ function AdminDashboard() {
   const fetchStatsAndAnalytics = useCallback(async (filterVal = dateFilter, isSilent = false) => {
     if (!isSilent) setRefreshing(true);
     try {
+      const queryParams = new URLSearchParams({
+        filter: filterVal,
+        category: filters.category || "",
+        status: filters.status || "",
+        startDate: filters.startDate || "",
+        endDate: filters.endDate || ""
+      }).toString();
+
       const [
         statsRes,
         monthlyRes,
         categoryRes,
         statusRes,
         heatmapRes,
-        hotspotRes
+        hotspotRes,
+        geoRes
       ] = await Promise.all([
         api.get("/admin/stats"),
         api.get(`/analytics/monthly?filter=${filterVal}`),
         api.get(`/analytics/category?filter=${filterVal}`),
         api.get(`/analytics/status?filter=${filterVal}`),
         api.get(`/analytics/heatmap?filter=${filterVal}`),
-        api.get(`/analytics/hotspots?filter=${filterVal}`)
+        api.get(`/analytics/hotspots?filter=${filterVal}`),
+        api.get(`/admin/geo-analytics?${queryParams}`)
       ]);
 
       setStats(statsRes.data);
@@ -79,15 +115,16 @@ function AdminDashboard() {
       setStatusData(statusRes.data);
       setHeatmapData(heatmapRes.data);
       setHotspotData(hotspotRes.data);
+      setGeoData(geoRes.data);
     } catch (err) {
       console.error("Failed to load SOC analytics logs", err);
     } finally {
       setRefreshing(false);
     }
-  }, [dateFilter]);
+  }, [dateFilter, filters]);
 
   // Fetch core static registries
-  const fetchRegistries = async () => {
+  const fetchRegistries = useCallback(async () => {
     setLoading(true);
     try {
       const [listRes, officersRes] = await Promise.all([
@@ -102,12 +139,17 @@ function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Fetch static registries on mount
   useEffect(() => {
     fetchRegistries();
+  }, [fetchRegistries]);
+
+  // Fetch stats and analytics when filters or dateFilter changes
+  useEffect(() => {
     fetchStatsAndAnalytics(dateFilter, false);
-  }, [dateFilter]);
+  }, [dateFilter, fetchStatsAndAnalytics]);
 
   // Real-time synchronization using Socket.IO
   useEffect(() => {
@@ -189,7 +231,7 @@ function AdminDashboard() {
   };
 
   // Filters Handler
-  const handleFilterChange = (key, value) => {
+  const handleFilterChange = useCallback((key, value) => {
     if (key === "reset") {
       setFilters({
         complaintId: "",
@@ -200,9 +242,12 @@ function AdminDashboard() {
         endDate: ""
       });
     } else {
-      setFilters(prev => ({ ...prev, [key]: value }));
+      setFilters(prev => {
+        if (prev[key] === value) return prev;
+        return { ...prev, [key]: value };
+      });
     }
-  };
+  }, []);
 
   // Filter complaints client-side based on filter settings
   const filteredComplaints = complaints.filter(c => {
@@ -556,6 +601,9 @@ function AdminDashboard() {
         hotspotData={hotspotData}
       />
 
+      {/* Geospatial Heatmap Density Section */}
+      <GeoHeatmap geoData={geoData} />
+
       {/* Search and Filters Section */}
       <div className="no-print">
         <AdminSearchFilters 
@@ -578,6 +626,8 @@ function AdminDashboard() {
           onDelete={handleDelete}
           onAssign={handleAssign}
           currentUser={user}
+          onDownloadPDF={handleDownloadPDF}
+          downloadingReportId={downloadingReportId}
         />
 
         {/* Detailed audit viewer slide-out */}
@@ -609,23 +659,49 @@ function AdminDashboard() {
                     Submitting Authority: <strong>{selectedComplaint.user?.name}</strong> ({selectedComplaint.user?.email} | {selectedComplaint.user?.phone})
                   </p>
                 </div>
-                <button
-                  onClick={() => setSelectedComplaint(null)}
-                  style={{
-                    padding: "8px 16px",
-                    background: "rgba(255, 255, 255, 0.05)",
-                    color: "var(--text-primary)",
-                    border: "1px solid var(--border-color)",
-                    borderRadius: "var(--radius-sm)",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                    width: "auto"
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)"}
-                  onMouseOut={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"}
-                >
-                  Close Audit View
-                </button>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    onClick={() => handleDownloadPDF(selectedComplaint.complaintId)}
+                    disabled={downloadingReportId === selectedComplaint.complaintId}
+                    style={{
+                      padding: "8px 16px",
+                      background: "var(--primary)",
+                      color: "#ffffff",
+                      border: "none",
+                      borderRadius: "var(--radius-sm)",
+                      cursor: "pointer",
+                      fontWeight: "600",
+                      width: "auto",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      boxShadow: "0 4px 10px var(--primary-glow)",
+                      transition: "var(--transition)"
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = "var(--primary-hover)"}
+                    onMouseOut={(e) => e.currentTarget.style.background = "var(--primary)"}
+                  >
+                    <Download size={14} color="#ffffff" />
+                    <span>{downloadingReportId === selectedComplaint.complaintId ? "Exporting..." : "Download Report"}</span>
+                  </button>
+                  <button
+                    onClick={() => setSelectedComplaint(null)}
+                    style={{
+                      padding: "8px 16px",
+                      background: "rgba(255, 255, 255, 0.05)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: "var(--radius-sm)",
+                      cursor: "pointer",
+                      fontWeight: "600",
+                      width: "auto"
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)"}
+                    onMouseOut={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"}
+                  >
+                    Close Audit View
+                  </button>
+                </div>
               </div>
 
               <hr style={{ border: 0, height: "1px", background: "var(--border-color)", margin: "25px 0" }} />

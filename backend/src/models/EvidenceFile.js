@@ -23,6 +23,26 @@ const EvidenceFile = sequelize.define('EvidenceFile', {
     defaultValue: DataTypes.NOW,
     field: 'uploaded_at',
   },
+  fileHash: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'file_hash',
+  },
+  fileSize: {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    field: 'file_size',
+  },
+  mimeType: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'mime_type',
+  },
+  metadataJson: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'metadata_json',
+  },
 }, {
   tableName: 'evidence_files',
   timestamps: false,

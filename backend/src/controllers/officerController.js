@@ -1,7 +1,10 @@
-const { Complaint, User, EvidenceFile, OfficerNote, EvidenceUpload, Notification } = require('../models');
+const { Complaint, User, EvidenceFile, OfficerNote, EvidenceUpload, Notification, AuditLog } = require('../models');
 const { Op } = require('sequelize');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const emailService = require('../services/emailService');
+const { createTimelineEvent } = require('../services/timelineService');
 
 // 1. Get Dashboard Stats for current officer
 async function getDashboardStats(req, res) {
@@ -143,6 +146,28 @@ async function updateCaseStatus(req, res) {
     complaint.status = status.toUpperCase();
     await complaint.save();
 
+    // Automatically create timeline event for status change by officer
+    let timelineMessage = `Complaint status updated to ${status.replace('_', ' ')}`;
+    let timelineStage = status.toUpperCase();
+    if (timelineStage === 'INVESTIGATING') {
+      timelineMessage = 'Investigation started by assigned officer';
+    } else if (timelineStage === 'RESOLVED') {
+      timelineMessage = 'Complaint resolved successfully';
+    } else if (timelineStage === 'REJECTED') {
+      timelineMessage = 'Complaint rejected';
+    } else if (timelineStage === 'UNDER_REVIEW') {
+      timelineMessage = 'Officer started reviewing complaint';
+    }
+
+    await createTimelineEvent(
+      complaint.complaintId,
+      timelineStage,
+      timelineMessage,
+      req.user.name,
+      req.user.role,
+      req.app.get('io')
+    );
+
     const updatedComplaint = await Complaint.findOne({
       where: { id },
       include: [
@@ -158,6 +183,28 @@ async function updateCaseStatus(req, res) {
     const io = req.app.get('io');
     if (io) {
       io.emit('complaint_updated', updatedComplaint);
+    }
+
+    // Log action to AuditLog
+    try {
+      await AuditLog.create({
+        userId: req.user.id,
+        userName: req.user.name,
+        action: 'STATUS_UPDATED',
+        details: `Officer updated complaint ${updatedComplaint.complaintId} status to ${status.toUpperCase()}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+      });
+    } catch (err) {
+      console.error('Failed to log status update audit:', err);
+    }
+
+    // Send email alert to citizen
+    if (updatedComplaint.user) {
+      try {
+        await emailService.sendCaseStatusAlert(updatedComplaint.user, updatedComplaint);
+      } catch (err) {
+        console.error('Failed to send status update email alert:', err);
+      }
     }
 
     // Create notifications for citizen & admin if resolved
@@ -270,13 +317,61 @@ async function uploadEvidence(req, res) {
       return res.status(404).json({ error: 'Case not found or not assigned to this officer.' });
     }
 
+    let fileHash = null;
+    let fileSize = req.file.size || null;
+    let mimeType = req.file.mimetype || null;
+    let metadataJson = JSON.stringify({
+      originalname: req.file.originalname,
+      encoding: req.file.encoding,
+      uploadedAt: new Date(),
+    });
+
+    try {
+      const uploadDir = process.env.UPLOAD_DIR || './uploads';
+      const fullPath = path.resolve(uploadDir, req.file.filename);
+      if (fs.existsSync(fullPath)) {
+        const fileBuffer = fs.readFileSync(fullPath);
+        fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+      }
+    } catch (err) {
+      console.error('Evidence file forensics error:', err);
+    }
+
     const evidence = await EvidenceUpload.create({
       complaintId,
       officerId,
       fileName: req.file.originalname,
       filePath: req.file.filename,
       uploadedAt: new Date(),
+      fileHash,
+      fileSize,
+      mimeType,
+      metadataJson,
     });
+
+    // Automatically create timeline event for evidence upload
+    await createTimelineEvent(
+      complaint.complaintId,
+      'EVIDENCE_COLLECTED',
+      `Evidence file collected: ${req.file.originalname}`,
+      req.user.name,
+      req.user.role,
+      req.app.get('io')
+    );
+
+    // Log action to AuditLog
+    try {
+      await AuditLog.create({
+        userId: req.user.id,
+        userName: req.user.name,
+        action: 'EVIDENCE_UPLOADED',
+        details: `Officer uploaded evidence file "${evidence.fileName}" for complaint ${complaint.complaintId}.`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+      });
+    } catch (err) {
+      console.error('Failed to log evidence upload audit:', err);
+    }
+
 
     // Emit socket notification/update
     const io = req.app.get('io');

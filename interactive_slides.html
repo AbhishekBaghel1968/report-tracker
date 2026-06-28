@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyber Crime Portal - Interactive Slide Deck</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@600;700;900&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --background: #07070d;
+      --primary: #0a0a12;
+      --accent: #00f0ff;
+      --accent-glow: rgba(0, 240, 255, 0.4);
+      --success: #00ff66;
+      --success-glow: rgba(0, 255, 102, 0.3);
+      --danger: #ff0055;
+      --warning: #ffaa00;
+      --text: #f0f0f5;
+      --text-muted: #8c91a0;
+      --card-bg: rgba(15, 15, 28, 0.6);
+      --border: rgba(30, 41, 59, 0.8);
+      --accent-border: rgba(0, 240, 255, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--background);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      /* Scan line background effect */
+      background-image: 
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      background-size: 100% 4px, 3px 100%;
+    }
+
+    /* Cyber grid overlay */
+    body::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: 
+        linear-gradient(transparent 98%, rgba(0, 240, 255, 0.02) 98%),
+        linear-gradient(90deg, transparent 98%, rgba(0, 240, 255, 0.02) 98%);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 1.5rem 3rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(7, 7, 13, 0.8);
+      backdrop-filter: blur(10px);
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo-badge {
+      background: rgba(0, 240, 255, 0.1);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+    }
+
+    .logo-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text);
+    }
+
+    .slide-indicator {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.9rem;
+      color: var(--accent);
+    }
+
+    /* Slides Container */
+    .slides-container {
+      position: relative;
+      flex: 1;
+      height: 100%;
+      z-index: 5;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 6.5rem 6rem 5rem 6rem;
+      opacity: 0;
+      transform: scale(0.98) translateY(10px);
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      pointer-events: auto;
+    }
+
+    /* Titles */
+    .slide-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.2rem;
+      color: var(--accent);
+      margin-bottom: 0.25rem;
+      letter-spacing: 2px;
+      text-shadow: 0 0 8px var(--accent-glow);
+    }
+
+    .slide-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.8rem;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+      letter-spacing: 1px;
+      border-bottom: 2px solid rgba(0, 240, 255, 0.1);
+      padding-bottom: 0.5rem;
+      max-width: 90%;
+    }
+
+    .slide-title span {
+      color: var(--accent);
+    }
+
+    /* Content Layouts */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+
+    .content-3col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .full-width {
+      width: 100%;
+    }
+
+    /* Cards & Text Styling */
+    .glass-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s ease;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--accent);
+      opacity: 0.7;
+    }
+
+    .glass-card.accent-green::before {
+      background: var(--success);
+    }
+
+    .glass-card:hover {
+      border-color: var(--accent-border);
+      box-shadow: 0 8px 32px 0 rgba(0, 240, 255, 0.05);
+      transform: translateY(-2px);
+    }
+
+    .card-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.25rem;
+      color: var(--accent);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      letter-spacing: 1px;
+    }
+
+    .glass-card.accent-green .card-title {
+      color: var(--success);
+    }
+
+    ul.bullet-list {
+      list-style: none;
+    }
+
+    ul.bullet-list li {
+      position: relative;
+      padding-left: 1.5rem;
+      margin-bottom: 0.8rem;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: #e2e8f0;
+    }
+
+    ul.bullet-list li strong {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    ul.bullet-list li::before {
+      content: '▪';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-size: 1rem;
+    }
+
+    ul.bullet-list.green-bullets li strong {
+      color: var(--success);
+    }
+    ul.bullet-list.green-bullets li::before {
+      color: var(--success);
+    }
+
+    /* Database Table representation */
+    .db-schema-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .db-table {
+      background: rgba(10, 10, 15, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.8rem;
+    }
+
+    .db-table-header {
+      background: rgba(30, 41, 59, 0.5);
+      padding: 0.4rem 0.8rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      color: var(--accent);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .db-table-rows {
+      padding: 0.5rem 0.8rem;
+    }
+
+    .db-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+      color: #d1d5db;
+    }
+
+    .db-row .pk {
+      color: #fbbf24;
+    }
+    .db-row .fk {
+      color: #38bdf8;
+    }
+    .db-row .type {
+      color: #64748b;
+    }
+
+    /* Socket Workflow demo */
+    .socket-flow-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      background: #090915;
+      padding: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-family: 'Fira Code', monospace;
+      font-size: 0.85rem;
+    }
+
+    .flow-step {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.5rem;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.02);
+      border-left: 3px solid #64748b;
+    }
+
+    .flow-step.active-sub { border-left-color: var(--accent); }
+    .flow-step.active-off { border-left-color: var(--warning); }
+    .flow-step.active-res { border-left-color: var(--success); }
+
+    .step-badge {
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      color: #fff;
+    }
+    .badge-sub { background: var(--accent); }
+    .badge-off { background: var(--warning); }
+    .badge-res { background: var(--success); }
+
+    /* Controls footer */
+    footer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      padding: 1.25rem 3rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(7, 7, 13, 0.95);
+      backdrop-filter: blur(10px);
+    }
+
+    .nav-btn {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.5rem 1.25rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 500;
+      letter-spacing: 1px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: rgba(0, 240, 255, 0.08);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .dots-container {
+      display: flex;
+      gap: 0.6rem;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .dot.active {
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+      transform: scale(1.3);
+    }
+
+    /* Key visual slide designs */
+    .slide-intro {
+      text-align: center;
+      align-items: center;
+    }
+
+    .title-glow {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 4.2rem;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: var(--text);
+      text-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+      margin-bottom: 0.5rem;
+    }
+
+    .title-glow span {
+      color: var(--accent);
+      text-shadow: 0 0 25px var(--accent-glow);
+    }
+
+    .sub-glow {
+      font-size: 1.4rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      max-width: 70%;
+      line-height: 1.4;
+    }
+
+    .cyber-hr {
+      width: 120px;
+      height: 4px;
+      background: var(--accent);
+      box-shadow: 0 0 15px var(--accent);
+      margin-bottom: 2.5rem;
+      border: none;
+    }
+
+    .intro-meta {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.95rem;
+      color: var(--accent);
+      display: flex;
+      gap: 2rem;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 0.8rem 2rem;
+      border-radius: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Tabs details */
+    .tab-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .tab-headers {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+      border-radius: 4px;
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      background: rgba(0, 240, 255, 0.05);
+    }
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.3s ease forwards;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .theme-color-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      font-family: 'Fira Code', monospace;
+      font-size: 0.85rem;
+    }
+    .color-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-badge">SECURE</div>
+      <div class="logo-text">CYBER COMPLAINT PORTAL</div>
+    </div>
+    <div class="slide-indicator" id="slide-number-display">SLIDE: 01 / 12</div>
+  </header>
+
+  <div class="slides-container">
+
+    <!-- SLIDE 1: TITLE SLIDE -->
+    <div class="slide slide-intro active">
+      <div class="logo-badge" style="margin-bottom: 1.5rem; font-size: 1rem;">COMPLAINT GATEWAY</div>
+      <h1 class="title-glow">CYBER CRIME <span>PORTAL</span></h1>
+      <p class="sub-glow">Secure, Role-Based, Real-Time Incident Reporting & Systemized Case Investigation</p>
+      <hr class="cyber-hr">
+      <div class="intro-meta">
+        <span>⚙️ Node.js + Express</span>
+        <span>⚛️ React 19 + Vite</span>
+        <span>💾 MySQL + Sequelize</span>
+        <span>⚡ Socket.IO</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 2: EXECUTIVE SUMMARY -->
+    <div class="slide">
+      <div class="slide-num">SECTION 01</div>
+      <h2 class="slide-title">EXECUTIVE <span>SUMMARY</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">PROJECT GOALS</div>
+          <ul class="bullet-list">
+            <li><strong>Digital Incident Reporting</strong>: Simple, accessible web interface empowering citizens to report online crimes directly to law enforcement.</li>
+            <li><strong>Official & Anonymous Filings</strong>: Dual operational channels to provide privacy safeguards for citizens reporting sensitive issues.</li>
+            <li><strong>Real-Time Notification Loop</strong>: WebSocket integration ensuring updates flow instantly to keep users synced across multiple sessions.</li>
+            <li><strong>Audited Workflows</strong>: Clear investigation timelines, system roles, and evidence tracking tools.</li>
+          </ul>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">KEY VALUE PROPOSITIONS</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>Privacy Shield</strong>: Complete anonymity options for reporting incidents securely without disclosing profile metadata.</li>
+            <li><strong>Dynamic Feeds</strong>: High-fidelity dashboards featuring instant count-cards, real-time alert badges, and responsive UI status flows.</li>
+            <li><strong>Evidence Locker</strong>: Secure uploads of images, files, and investigations logs directly connected to cases.</li>
+            <li><strong>Account Operations</strong>: Centralized administrative control to manage users, assign cases, and register officers.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: SYSTEM ARCHITECTURE -->
+    <div class="slide">
+      <div class="slide-num">SECTION 02</div>
+      <h2 class="slide-title">SYSTEM <span>ARCHITECTURE</span></h2>
+      <div class="content-3col">
+        <div class="glass-card">
+          <div class="card-title">FRONTEND CLIENT</div>
+          <ul class="bullet-list">
+            <li><strong>React 19 & Vite</strong>: High-performance single page client app.</li>
+            <li><strong>Context API</strong>: Manage active user session variables and auth tokens.</li>
+            <li><strong>Axios Client</strong>: Interceptors handling server API headers and token refreshing.</li>
+            <li><strong>Socket.IO Client</strong>: Persistent WebSocket handshakes.</li>
+            <li><strong>CSS Tokens</strong>: Premium dark theme and glassmorphic designs.</li>
+          </ul>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">BACKEND API SERVER</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>Node.js & Express</strong>: Asynchronous HTTP routing, file handling, and API gateways.</li>
+            <li><strong>Socket.IO Server</strong>: Manages real-time rooms, events emitter, and client states.</li>
+            <li><strong>JWT & bcryptjs</strong>: User authorization and secure bcrypt password hashing.</li>
+            <li><strong>Sequelize ORM</strong>: Manages schemas, relations, and auto-seeding protocols.</li>
+          </ul>
+        </div>
+        <div class="glass-card">
+          <div class="card-title">DATABASE ENGINE</div>
+          <ul class="bullet-list">
+            <li><strong>MySQL Server</strong>: Standard relational database storage.</li>
+            <li><strong>Configured Constraints</strong>: Cascading foreign key definitions ensuring relational integrity.</li>
+            <li><strong>Localized Storage</strong>: Dedicated `mysql_data` folder for portable startup configurations.</li>
+            <li><strong>Automatic Syncing</strong>: Backend server auto-creates schemas and seeds baseline system tables.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: DATABASE SCHEMAS -->
+    <div class="slide">
+      <div class="slide-num">SECTION 03</div>
+      <h2 class="slide-title">DATABASE <span>SCHEMAS & MODELING</span></h2>
+      <div class="db-schema-grid">
+        
+        <!-- Table 1 -->
+        <div class="db-table">
+          <div class="db-table-header">users <span>Table</span></div>
+          <div class="db-table-rows">
+            <div class="db-row"><span class="pk">id</span> <span class="type">BIGINT (PK)</span></div>
+            <div class="db-row"><span>name</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>email</span> <span class="type">VARCHAR (UQ)</span></div>
+            <div class="db-row"><span>phone</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>password</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>role</span> <span class="type">ENUM</span></div>
+            <div class="db-row"><span>status</span> <span class="type">ENUM</span></div>
+          </div>
+        </div>
+
+        <!-- Table 2 -->
+        <div class="db-table">
+          <div class="db-table-header">complaints <span>Table</span></div>
+          <div class="db-table-rows">
+            <div class="db-row"><span class="pk">id</span> <span class="type">BIGINT (PK)</span></div>
+            <div class="db-row"><span>complaintId</span> <span class="type">VARCHAR (UQ)</span></div>
+            <div class="db-row"><span>title</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>category</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>priority</span> <span class="type">ENUM</span></div>
+            <div class="db-row"><span>description</span> <span class="type">TEXT</span></div>
+            <div class="db-row"><span>status</span> <span class="type">ENUM</span></div>
+            <div class="db-row"><span class="fk">userId</span> <span class="type">BIGINT (FK)</span></div>
+            <div class="db-row"><span class="fk">officerId</span> <span class="type">BIGINT (FK)</span></div>
+          </div>
+        </div>
+
+        <!-- Table 3 -->
+        <div class="db-table">
+          <div class="db-table-header">evidence_files <span>Table</span></div>
+          <div class="db-table-rows">
+            <div class="db-row"><span class="pk">id</span> <span class="type">BIGINT (PK)</span></div>
+            <div class="db-row"><span>fileName</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>filePath</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>uploadedAt</span> <span class="type">TIMESTAMP</span></div>
+            <div class="db-row"><span class="fk">complaintId</span> <span class="type">BIGINT (FK)</span></div>
+          </div>
+        </div>
+
+        <!-- Table 4 -->
+        <div class="db-table">
+          <div class="db-table-header">officer_notes <span>Table</span></div>
+          <div class="db-table-rows">
+            <div class="db-row"><span class="pk">id</span> <span class="type">BIGINT (PK)</span></div>
+            <div class="db-row"><span>note</span> <span class="type">TEXT</span></div>
+            <div class="db-row"><span>officerName</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>createdAt</span> <span class="type">TIMESTAMP</span></div>
+            <div class="db-row"><span class="fk">officerId</span> <span class="type">BIGINT (FK)</span></div>
+            <div class="db-row"><span class="fk">complaintId</span> <span class="type">BIGINT (FK)</span></div>
+          </div>
+        </div>
+
+        <!-- Table 5 -->
+        <div class="db-table">
+          <div class="db-table-header">evidence_uploads <span>Table</span></div>
+          <div class="db-table-rows">
+            <div class="db-row"><span class="pk">id</span> <span class="type">BIGINT (PK)</span></div>
+            <div class="db-row"><span>fileName</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>filePath</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>uploadedAt</span> <span class="type">TIMESTAMP</span></div>
+            <div class="db-row"><span class="fk">complaintId</span> <span class="type">BIGINT (FK)</span></div>
+            <div class="db-row"><span class="fk">officerId</span> <span class="type">BIGINT (FK)</span></div>
+          </div>
+        </div>
+
+        <!-- Table 6 -->
+        <div class="db-table">
+          <div class="db-table-header">notifications <span>Table</span></div>
+          <div class="db-table-rows">
+            <div class="db-row"><span class="pk">id</span> <span class="type">BIGINT (PK)</span></div>
+            <div class="db-row"><span>title</span> <span class="type">VARCHAR</span></div>
+            <div class="db-row"><span>message</span> <span class="type">TEXT</span></div>
+            <div class="db-row"><span>type</span> <span class="type">ENUM</span></div>
+            <div class="db-row"><span>isRead</span> <span class="type">BOOLEAN</span></div>
+            <div class="db-row"><span>createdAt</span> <span class="type">TIMESTAMP</span></div>
+            <div class="db-row"><span class="fk">userId</span> <span class="type">BIGINT (FK)</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SLIDE 5: REAL-TIME WEBSOCKET FLOW -->
+    <div class="slide">
+      <div class="slide-num">SECTION 04</div>
+      <h2 class="slide-title">REAL-TIME <span>NOTIFICATION SUBSYSTEM</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">SOCKET ROOM STRATEGY</div>
+          <ul class="bullet-list">
+            <li><strong>Direct User Room (`user_<userId>`)</strong>: Dedicated room mapped to unique user database ID. Handles highly targeted alert notifications (e.g. status revisions for the citizen, new casework assigned to the officer).</li>
+            <li><strong>Role-Based Rooms</strong>: Global listeners for role broadcast groups:
+              <br>&bull; `admin` room - Broadcasts new complaints.
+              <br>&bull; `officer` room - Broadcasts updates.
+              <br>&bull; `citizen` room - Broadcasts system alerts.
+            </li>
+            <li><strong>Client Syncing</strong>: Frontend state context hooks onto socket listeners, prompting immediate state refetches.</li>
+          </ul>
+        </div>
+        <div class="socket-flow-container">
+          <div style="font-weight: bold; color: var(--accent); margin-bottom: 0.5rem; font-family: 'Orbitron', sans-serif;">EVENT TRANSITIONS:</div>
+          <div class="flow-step active-sub">
+            <span class="step-badge badge-sub">SUBMIT</span>
+            <span>Citizen files Case COMP-0231. Server writes to DB & emits <strong>"notification"</strong> payload to <strong>"admin"</strong> room.</span>
+          </div>
+          <div class="flow-step active-off">
+            <span class="step-badge badge-off">ASSIGN</span>
+            <span>Admin delegates case to Officer. Server emits <strong>"notification"</strong> payload to room <strong>"user_2"</strong>.</span>
+          </div>
+          <div class="flow-step active-res">
+            <span class="step-badge badge-res">RESOLVE</span>
+            <span>Officer marks case RESOLVED. Server emits <strong>"notification"</strong> payload to room <strong>"user_5"</strong>. Toast alert triggers on citizen client.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 6: CITIZEN PORTAL -->
+    <div class="slide">
+      <div class="slide-num">SECTION 05</div>
+      <h2 class="slide-title">CITIZEN <span>PORTAL WORKFLOW</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">FILING AND TRACKING</div>
+          <ul class="bullet-list">
+            <li><strong>Anonymous Submissions</strong>: Toggling anonymity masks the user's details on dashboards, encouraging citizens to report sensitive crimes safely.</li>
+            <li><strong>Detailed Reports Forms</strong>: Form validates inputs for incident title, date, priority, type (financial fraud, cyberbullying, hacking), description, and location.</li>
+            <li><strong>Secure Evidence Attachment</strong>: Citizens can upload evidence documents during case creation, which are moved to secure storage paths.</li>
+          </ul>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">DASHBOARD & NOTIFICATIONS</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>Interactive Pipeline</strong>: Interactive timeline showing progress states: `SUBMITTED` &rarr; `UNDER_REVIEW` &rarr; `INVESTIGATING` &rarr; `RESOLVED`.</li>
+            <li><strong>Alert Drawer Panel</strong>: Access historical notification logs. Action buttons allow marking alerts as read or deleting records.</li>
+            <li><strong>Live Badge Counters</strong>: Top navigation bell contains unread badges that bounce and shake upon receiving new alerts.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: OFFICER PORTAL -->
+    <div class="slide">
+      <div class="slide-num">SECTION 06</div>
+      <h2 class="slide-title">OFFICER <span>INVESTIGATIVE FLOW</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">CASE LOGISTICS</div>
+          <ul class="bullet-list">
+            <li><strong>Personal Task Queue</strong>: Clean interface listing all complaints assigned to the officer's ID.</li>
+            <li><strong>Status Progression Controls</strong>: Dropdowns enabling state transitions:
+              <br>&bull; `UNDER_REVIEW` (Assigned case review phase)
+              <br>&bull; `INVESTIGATING` (Gathering forensics)
+              <br>&bull; `RESOLVED` / `REJECTED` (Final resolution states)
+            </li>
+            <li><strong>Relational Audits</strong>: Database records updates, log histories, and associated attachments.</li>
+          </ul>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">FORENSICS & NOTEBOOK</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>Timeline Journaling</strong>: Officers can submit notes to an active case log. Notes compile chronologically with date-stamps.</li>
+            <li><strong>Investigation Evidence Uploads</strong>: Supplemental evidence file uploader built into the officer workspace. Files are saved in secure uploads subfolders.</li>
+            <li><strong>Real-time Broadcasts</strong>: All updates are pushed to Socket.IO, triggering instant browser notifications for citizens and administrators.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: ADMINISTRATOR PORTAL -->
+    <div class="slide">
+      <div class="slide-num">SECTION 07</div>
+      <h2 class="slide-title">ADMINISTRATOR <span>SYSTEM PANEL</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">SYSTEM ANALYTICS & MONITORING</div>
+          <ul class="bullet-list">
+            <li><strong>Visual Statistics Cards</strong>: Metrics highlighting total complaints, resolved counts, pending tasks, and active officers.</li>
+            <li><strong>Case Assignment Gateways</strong>: Admins review incoming citizen complaints, set investigation severity, and assign officers.</li>
+            <li><strong>Case Lifecycle Supervision</strong>: Global read/write access allowing administrators to oversee case statuses and review officer progress.</li>
+          </ul>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">ACCOUNTS & CREDENTIAL CONTROLS</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>User Account Grid</strong>: Complete profile overview of registered citizens, tracking details, email addresses, and phone contacts.</li>
+            <li><strong>Profile State Toggling</strong>: Ability to disable accounts (`ACTIVE` vs `DISABLED`) to isolate spam or abusive report users.</li>
+            <li><strong>Officer Onboarding Workspace</strong>: Dedicated panels to register credentials and assign IDs to new investigative officers.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: UI/UX DESIGN SYSTEM -->
+    <div class="slide">
+      <div class="slide-num">SECTION 08</div>
+      <h2 class="slide-title">UI/UX <span>DESIGN SYSTEM</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">THEME PALETTE</div>
+          <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+            <div class="theme-color-box"><div class="color-swatch" style="background:#07070d;"></div><span>Deep Space: #07070d</span></div>
+            <div class="theme-color-box"><div class="color-swatch" style="background:#0a0a12;"></div><span>Primary BG: #0a0a12</span></div>
+            <div class="theme-color-box"><div class="color-swatch" style="background:#00f0ff;"></div><span>Cyber Cyan: #00f0ff</span></div>
+            <div class="theme-color-box"><div class="color-swatch" style="background:#00ff66;"></div><span>Matrix Green: #00ff66</span></div>
+            <div class="theme-color-box"><div class="color-swatch" style="background:#ff0055;"></div><span>Alert Red: #ff0055</span></div>
+          </div>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">VISUAL & INTERACTIVE POLISH</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>Glassmorphic Cards</strong>: UI layout elements use transparent card sheets (`rgba(15, 15, 28, 0.6)`) with `backdrop-filter: blur(12px)` and glowing CSS shadows.</li>
+            <li><strong>Micro-Animations</strong>: Keyframe shake effect applied to the notification bell icon when unread alerts are present, plus hover effects.</li>
+            <li><strong>Feedback states</strong>: Integrated real-time alert badges, visual timeline lines, and glowing network status circles.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: SECURITY & AUTHENTICATION -->
+    <div class="slide">
+      <div class="slide-num">SECTION 09</div>
+      <h2 class="slide-title">SECURITY & <span>DATA INTEGRITY</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">AUTHENTICATION & SESSIONS</div>
+          <ul class="bullet-list">
+            <li><strong>Password Protection</strong>: Employs `bcryptjs` hashing with automated salt generation. Raw plain-text passwords are never logged or stored.</li>
+            <li><strong>Stateless Access Tokens</strong>: JWT tokens issued upon successful login, authorizing frontend Axios requests using authorization headers.</li>
+            <li><strong>Auth Guard Middleware</strong>: Express backend routes run access-token checking middleware. React client routes protect directories via context validation.</li>
+          </ul>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">INTEGRITY & PROTECTION</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>SQL Injection Blocks</strong>: Enforces strict data-mapping constraints via Sequelize parameterized queries, blocking database attacks.</li>
+            <li><strong>Cross-Origin Safeguards</strong>: Employs CORS middleware security configurations, locking server resources to recognized frontend clients.</li>
+            <li><strong>Upload Directories Lockdown</strong>: Evidence uploader routes validate file sizes and file extensions, protecting server space from scripts.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 11: SETUP & DEPLOYMENT -->
+    <div class="slide">
+      <div class="slide-num">SECTION 10</div>
+      <h2 class="slide-title">SETUP & <span>EXECUTION INSTANCE</span></h2>
+      <div class="tab-container">
+        <div class="tab-headers">
+          <button class="tab-btn active" onclick="switchTab(event, 'auto-setup')">AUTOMATIC SETUP</button>
+          <button class="tab-btn" onclick="switchTab(event, 'manual-setup')">MANUAL SETUP</button>
+          <button class="tab-btn" onclick="switchTab(event, 'credentials')">DEMO CREDENTIALS</button>
+        </div>
+        
+        <div id="auto-setup" class="tab-content active">
+          <div class="glass-card">
+            <div class="card-title">WINDOWS AUTOMATIC BATCH RUNNER</div>
+            <p style="font-size: 0.95rem; margin-bottom: 0.8rem; line-height: 1.5;">The system includes a pre-configured `start-services.bat` launcher that simplifies deployment:</p>
+            <ul class="bullet-list">
+              <li><strong>Task 1</strong>: Checks local environments and installs Node modules for root & backend.</li>
+              <li><strong>Task 2</strong>: Provisions localized database configurations inside the `mysql_data` directory.</li>
+              <li><strong>Task 3</strong>: Launches the MySQL Server instance (`mysqld.exe`) on port `3306`.</li>
+              <li><strong>Task 4</strong>: Starts Node API (`localhost:8080`) and Vite Client (`localhost:5173`) and opens the browser.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="manual-setup" class="tab-content">
+          <div class="glass-card accent-green">
+            <div class="card-title" style="color: var(--success);">MANUAL CONSOLE COMMANDS</div>
+            <ul class="bullet-list green-bullets" style="font-family: 'Fira Code', monospace; font-size: 0.8rem;">
+              <li>1. Install packages: <span style="color:var(--accent);">npm install && cd backend && npm install</span></li>
+              <li>2. Configure properties: Setup MySQL host, user, and password in <span style="color:var(--accent);">backend/.env</span></li>
+              <li>3. Start Database: <span style="color:var(--accent);">"mysqld.exe" --datadir="D:\cyber security\mysql_data" --port=3306</span></li>
+              <li>4. Launch Backend API: <span style="color:var(--accent);">cd backend && npm run dev</span> (starts DB migrations & seeding)</li>
+              <li>5. Launch Frontend App: <span style="color:var(--accent);">npm run dev</span> (opens app on localhost:5173)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="credentials" class="tab-content">
+          <div class="glass-card">
+            <div class="card-title">DEMO LOGINS (PRE-SEEDED)</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; font-family: 'Fira Code', monospace; font-size: 0.85rem;">
+              <div style="background: rgba(255, 255, 255, 0.02); padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+                <div style="color: var(--accent); font-weight: bold; margin-bottom: 0.5rem;">👮 ADMIN ROLE</div>
+                Email: admin@gmail.com<br>Pass: admin123
+              </div>
+              <div style="background: rgba(255, 255, 255, 0.02); padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+                <div style="color: var(--success); font-weight: bold; margin-bottom: 0.5rem;">👤 CITIZEN ROLE</div>
+                Email: user@gmail.com<br>Pass: user1234
+              </div>
+              <div style="background: rgba(255, 255, 255, 0.02); padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+                <div style="color: var(--warning); font-weight: bold; margin-bottom: 0.5rem;">🕵️ OFFICER ROLE</div>
+                Email: officer@gmail.com<br>Pass: officer123
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 12: CONCLUSION & ROADMAP -->
+    <div class="slide">
+      <div class="slide-num">SECTION 11</div>
+      <h2 class="slide-title">CONCLUSION & <span>FUTURE ENHANCEMENTS</span></h2>
+      <div class="content-grid">
+        <div class="glass-card">
+          <div class="card-title">PROJECT DELIVERABLES</div>
+          <ul class="bullet-list">
+            <li><strong>Stable Decoupled Base</strong>: Fully operational React + Express application with robust performance.</li>
+            <li><strong>Relational DB Mapping</strong>: Complete database tables model mapping and relationships in Sequelize.</li>
+            <li><strong>Real-time Alerting Core</strong>: Integrated WebSockets providing responsive interactions for all user roles.</li>
+          </ul>
+        </div>
+        <div class="glass-card accent-green">
+          <div class="card-title" style="color: var(--success);">FUTURE DEPLOYMENT PATHS</div>
+          <ul class="bullet-list green-bullets">
+            <li><strong>AI Categorization & Priority Engines</strong>: Machine learning models to parse text descriptions and automatically tag categories and severity.</li>
+            <li><strong>Blockchain Ledger</strong>: Secure evidence hashing to maintain tamper-proof chain of custody audits.</li>
+            <li><strong>Secure Messaging</strong>: Direct cryptographically secured in-app channels for citizens and investigators.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <button class="nav-btn" id="prev-btn" onclick="prevSlide()" disabled>PREVIOUS</button>
+    <div class="dots-container" id="dots-container"></div>
+    <button class="nav-btn" id="next-btn" onclick="nextSlide()">NEXT</button>
+  </footer>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const dotsContainer = document.getElementById('dots-container');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const displayNum = document.getElementById('slide-number-display');
+    
+    let currentSlide = 0;
+
+    // Build navigation dots
+    slides.forEach((slide, idx) => {
+      const dot = document.createElement('div');
+      dot.classList.add('dot');
+      if (idx === 0) dot.classList.add('active');
+      dot.addEventListener('click', () => showSlide(idx));
+      dotsContainer.appendChild(dot);
+    });
+
+    const dots = document.querySelectorAll('.dot');
+
+    function showSlide(index) {
+      if (index < 0 || index >= slides.length) return;
+      
+      slides[currentSlide].classList.remove('active');
+      dots[currentSlide].classList.remove('active');
+      
+      currentSlide = index;
+      
+      slides[currentSlide].classList.add('active');
+      dots[currentSlide].classList.add('active');
+      
+      // Update buttons state
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === slides.length - 1;
+      
+      // Update display text
+      const slideNumFormatted = String(currentSlide + 1).padStart(2, '0');
+      const totalNumFormatted = String(slides.length).padStart(2, '0');
+      displayNum.innerText = `SLIDE: ${slideNumFormatted} / ${totalNumFormatted}`;
+    }
+
+    function nextSlide() {
+      if (currentSlide < slides.length - 1) {
+        showSlide(currentSlide + 1);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        showSlide(currentSlide - 1);
+      }
+    }
+
+    // Keyboard controls
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'Space') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prevSlide();
+      }
+    });
+
+    // Tab switching utility
+    function switchTab(event, tabId) {
+      const container = event.target.closest('.tab-container');
+      
+      // Deactivate current tabs
+      container.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      container.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      
+      // Activate new tab
+      event.target.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+  </script>
+</body>
+</html>

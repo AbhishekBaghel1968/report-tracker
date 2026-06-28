@@ -1139,3 +1139,73 @@ button[type="submit"]:disabled {
   background: var(--glass-bg-hover);
   box-shadow: 0 8px 24px rgba(139, 92, 246, 0.15), var(--shadow-md);
 }
+
+/* Print Styles for case reports */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #0c0f1d !important;
+    background-image: none !important;
+    font-size: 12pt !important;
+  }
+
+  .no-print,
+  .sidebar,
+  .navbar,
+  .footer,
+  button,
+  .header-actions,
+  input {
+    display: none !important;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .dashboard,
+  .case-timeline-container,
+  .print-section {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #0c0f1d !important;
+    box-shadow: none !important;
+    padding: 20px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 15px !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #000000 !important;
+  }
+
+  span, p, div {
+    color: #334155 !important;
+  }
+
+  /* Override custom indicator colors for printable document */
+  div[style*="background: rgba(255, 255, 255, 0.06)"] {
+    background: #cbd5e1 !important;
+  }
+
+  .timeline-card-active {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+  }
+
+  .timeline-card-pending {
+    background: #ffffff !important;
+    border: 1px dashed #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+
+  .timeline-card-pending h4,
+  .timeline-card-pending p,
+  .timeline-card-pending span {
+    color: #94a3b8 !important;
+  }
+}

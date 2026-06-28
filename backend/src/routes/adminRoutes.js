@@ -13,5 +13,6 @@ router.put('/assign/:complaintId', adminController.assignComplaintById);
 router.get('/users', adminController.getUsers);
 router.put('/users/:id/status', adminController.updateUserStatus);
 router.delete('/users/:id', adminController.deleteUser);
+router.get('/audit-logs', adminController.getAuditLogs);
 
 module.exports = router;

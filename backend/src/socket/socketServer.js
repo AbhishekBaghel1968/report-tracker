@@ -51,6 +51,21 @@ function initSocketServer(io) {
       }
     });
 
+    // Secure chat room operations
+    socket.on('join_chat', (data) => {
+      if (data.complaintId) {
+        socket.join(`chat_${data.complaintId}`);
+        console.log(`Socket ${socket.id} joined chat room: chat_${data.complaintId}`);
+      }
+    });
+
+    socket.on('leave_chat', (data) => {
+      if (data.complaintId) {
+        socket.leave(`chat_${data.complaintId}`);
+        console.log(`Socket ${socket.id} left chat room: chat_${data.complaintId}`);
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${socket.id}`);
     });

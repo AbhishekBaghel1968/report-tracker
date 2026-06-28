@@ -44,10 +44,63 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: true,
     defaultValue: 'Unknown',
   },
+  city: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'Unknown',
+  },
+  state: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'Unknown',
+  },
+  latitude: {
+    type: DataTypes.DECIMAL(10, 8),
+    allowNull: true,
+  },
+  longitude: {
+    type: DataTypes.DECIMAL(11, 8),
+    allowNull: true,
+  },
   officerId: {
     type: DataTypes.BIGINT,
     allowNull: true,
     field: 'officer_id',
+  },
+  aiSummary: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'ai_summary',
+  },
+  aiCategory: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'ai_category',
+  },
+  aiPriority: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'ai_priority',
+  },
+  aiRiskScore: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'ai_risk_score',
+  },
+  aiIocs: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'ai_iocs',
+  },
+  fraudRiskLevel: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'fraud_risk_level',
+  },
+  fraudReasons: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'fraud_reasons',
   },
 }, {
   tableName: 'complaints',

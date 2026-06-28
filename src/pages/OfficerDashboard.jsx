@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Shield, FileText, CheckCircle, Clock, AlertTriangle, 
-  Search, Eye, ArrowRight, Activity, TrendingUp, BarChart3, Loader2
+  Search, Eye, ArrowRight, Activity, TrendingUp, BarChart3, Loader2, Download
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -34,6 +34,30 @@ function OfficerDashboard() {
   });
   const [recentCases, setRecentCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingReportId, setDownloadingReportId] = useState(null);
+
+  const handleDownloadPDF = async (complaintId) => {
+    setDownloadingReportId(complaintId);
+    try {
+      const response = await api.get(`/reports/${complaintId}/pdf`, {
+        responseType: "blob"
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${complaintId}-report.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading PDF report", err);
+      alert("Failed to download PDF report. Ensure you have proper authorization.");
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -360,7 +384,7 @@ function OfficerDashboard() {
                         {c.status.replace("_", " ")}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                       <button
                         onClick={() => navigate(`/officer/case/${c.id}`)}
                         style={{
@@ -373,12 +397,39 @@ function OfficerDashboard() {
                           gap: "6px",
                           fontWeight: "600",
                           fontSize: "0.9rem",
-                          transition: "var(--transition)"
+                          transition: "var(--transition)",
+                          padding: 0
                         }}
                         onMouseOver={(e) => e.currentTarget.style.color = "var(--accent)"}
                         onMouseOut={(e) => e.currentTarget.style.color = "var(--primary)"}
                       >
                         <Eye size={16} /> View Details
+                      </button>
+                      <button
+                        onClick={() => handleDownloadPDF(c.complaintId)}
+                        disabled={downloadingReportId === c.complaintId}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "var(--success)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontWeight: "600",
+                          fontSize: "0.9rem",
+                          transition: "var(--transition)",
+                          padding: 0
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.color = "var(--accent)"}
+                        onMouseOut={(e) => e.currentTarget.style.color = "var(--success)"}
+                      >
+                        {downloadingReportId === c.complaintId ? (
+                          <Loader2 size={16} className="spin-animation" style={{ animation: "spin 1s linear infinite" }} />
+                        ) : (
+                          <Download size={16} />
+                        )}
+                        <span>{downloadingReportId === c.complaintId ? "Exporting..." : "Export PDF"}</span>
                       </button>
                     </td>
                   </tr>

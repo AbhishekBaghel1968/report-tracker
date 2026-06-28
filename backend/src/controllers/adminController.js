@@ -1,5 +1,6 @@
-const { User, Complaint, EvidenceFile, Notification } = require('../models');
+const { User, Complaint, EvidenceFile, Notification, AuditLog } = require('../models');
 const { Op } = require('sequelize');
+const { createTimelineEvent } = require('../services/timelineService');
 
 /**
  * Fetch total statistics for the SOC Dashboard.
@@ -138,6 +139,16 @@ async function assignComplaint(req, res) {
 
     await complaint.save();
 
+    // Automatically create timeline event for officer assignment
+    await createTimelineEvent(
+      complaint.complaintId,
+      'ASSIGNED',
+      officerId ? `Case assigned to Cyber Defense Officer ${officerName}` : 'Case unassigned from officer',
+      req.user.name,
+      req.user.role,
+      req.app.get('io')
+    );
+
     // Reload with associations
     const updatedComplaint = await Complaint.findByPk(id, {
       include: [
@@ -166,10 +177,24 @@ async function assignComplaint(req, res) {
         if (io) {
           io.to(`user_${officerId}`).emit('notification', officerNotif);
         }
+
+        // Log assignment to AuditLog
+        try {
+          await AuditLog.create({
+            userId: req.user.id,
+            userName: req.user.name,
+            action: 'CASE_ASSIGNED',
+            details: `Assigned complaint ${complaint.complaintId} to officer ${officer.name} (${officer.email})`,
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+          });
+        } catch (err) {
+          console.error('Failed to log assignment audit:', err);
+        }
       } catch (error) {
         console.error('Error creating assignment notification:', error);
       }
     }
+
 
     return res.status(200).json(updatedComplaint);
   } catch (error) {
@@ -210,6 +235,16 @@ async function assignComplaintById(req, res) {
     }
 
     await complaint.save();
+
+    // Automatically create timeline event for officer assignment
+    await createTimelineEvent(
+      complaint.complaintId,
+      'ASSIGNED',
+      officerId ? `Case assigned to Cyber Defense Officer ${officerName}` : 'Case unassigned from officer',
+      req.user.name,
+      req.user.role,
+      req.app.get('io')
+    );
 
     // Reload with associations
     const updatedComplaint = await Complaint.findByPk(complaint.id, {
@@ -323,6 +358,19 @@ async function deleteUser(req, res) {
   }
 }
 
+async function getAuditLogs(req, res) {
+  try {
+    const logs = await AuditLog.findAll({
+      order: [['createdAt', 'DESC']],
+      limit: 100
+    });
+    return res.status(200).json(logs);
+  } catch (error) {
+    console.error('Get audit logs error:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
 module.exports = {
   getStats,
   getOfficers,
@@ -331,4 +379,5 @@ module.exports = {
   getUsers,
   updateUserStatus,
   deleteUser,
+  getAuditLogs,
 };

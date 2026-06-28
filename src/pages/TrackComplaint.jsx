@@ -3,13 +3,45 @@ import { useSearchParams } from "react-router-dom";
 import { Search, Clock, ShieldAlert, FileText, Download, ShieldCheck } from "lucide-react";
 import api from "../services/api";
 import { motion, AnimatePresence } from "framer-motion";
+import CaseTimeline from "../components/CaseTimeline";
+import { useSocket } from "../context/SocketContext";
+import { io } from "socket.io-client";
+import { useAuth } from "../context/AuthContext";
 
 function TrackComplaint() {
+  const { socket } = useSocket();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [complaintIdInput, setComplaintIdInput] = useState("");
   const [complaint, setComplaint] = useState(null);
+  const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!complaint) return;
+    setDownloading(true);
+    try {
+      const response = await api.get(`/reports/${complaint.complaintId}/pdf`, {
+        responseType: "blob"
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${complaint.complaintId}-report.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading PDF report", err);
+      alert("Failed to download PDF report. Access restricted to authorized personnel.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const urlId = searchParams.get("id");
 
@@ -19,6 +51,52 @@ function TrackComplaint() {
       handleTrack(urlId);
     }
   }, [urlId]);
+
+  useEffect(() => {
+    let activeSocket = socket;
+    let localSocket = null;
+
+    if (complaint) {
+      if (!activeSocket) {
+        const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:8080";
+        localSocket = io(SOCKET_URL, { withCredentials: true });
+        activeSocket = localSocket;
+      }
+
+      const handleTimelineCreated = (entry) => {
+        if (entry.complaintId === complaint.complaintId) {
+          setTimeline((prev) => {
+            if (prev.some(t => t.id === entry.id)) return prev;
+            const updated = [...prev, entry];
+            return updated.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          });
+        }
+      };
+
+      const handleComplaintUpdated = (updated) => {
+        if (updated.complaintId === complaint.complaintId) {
+          setComplaint(updated);
+          // Re-fetch timeline entries in case new ones were added
+          api.get(`/timeline/${updated.complaintId}`).then(res => {
+            setTimeline(res.data);
+          }).catch(err => console.error(err));
+        }
+      };
+
+      activeSocket.on("timeline_entry_created", handleTimelineCreated);
+      activeSocket.on("complaint_updated", handleComplaintUpdated);
+    }
+
+    return () => {
+      if (activeSocket) {
+        activeSocket.off("timeline_entry_created", handleTimelineCreated);
+        activeSocket.off("complaint_updated", handleComplaintUpdated);
+      }
+      if (localSocket) {
+        localSocket.disconnect();
+      }
+    };
+  }, [socket, complaint]);
 
   const handleTrack = async (id) => {
     const trackingId = id || complaintIdInput;
@@ -34,6 +112,15 @@ function TrackComplaint() {
     try {
       const response = await api.get(`/complaints/track/${trackingId.trim()}`);
       setComplaint(response.data);
+
+      // Fetch timeline entries
+      try {
+        const timelineRes = await api.get(`/timeline/${trackingId.trim()}`);
+        setTimeline(timelineRes.data);
+      } catch (timelineErr) {
+        console.error("Error fetching case timeline details:", timelineErr);
+        setTimeline([]);
+      }
     } catch (err) {
       console.error("Error tracking complaint", err);
       const msg = err.response?.status === 404 
@@ -61,12 +148,71 @@ function TrackComplaint() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 80, damping: 15 }}
     >
-      <h2 style={{ fontSize: "1.5rem", fontWeight: "700", color: "var(--text-primary)" }}>
-        Audit Case Tracking
-      </h2>
-      <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginTop: "4px" }}>
-        Track real-time security logs, case classifications, and investigator status.
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px" }} className="no-print">
+        <div>
+          <h2 style={{ fontSize: "1.5rem", fontWeight: "700", color: "var(--text-primary)" }}>
+            Audit Case Tracking
+          </h2>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginTop: "4px" }}>
+            Track real-time security logs, case classifications, and investigator status.
+          </p>
+        </div>
+        {complaint && (
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              onClick={() => window.print()}
+              style={{
+                padding: "10px 20px",
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text-primary)",
+                fontSize: "0.9rem",
+                fontWeight: "600",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                transition: "var(--transition)",
+                marginBottom: 0,
+                width: "auto"
+              }}
+              onMouseOver={(e) => e.currentTarget.style.borderColor = "var(--accent)"}
+              onMouseOut={(e) => e.currentTarget.style.borderColor = "var(--border-color)"}
+            >
+              <span>Print Report</span>
+            </button>
+            {user && (user.role === 'ROLE_ADMIN' || user.role === 'ROLE_OFFICER') && (
+              <button
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+                style={{
+                  padding: "10px 20px",
+                  background: "var(--primary)",
+                  border: "none",
+                  borderRadius: "var(--radius-sm)",
+                  color: "#ffffff",
+                  fontSize: "0.9rem",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "var(--transition)",
+                  marginBottom: 0,
+                  width: "auto",
+                  boxShadow: "0 4px 12px var(--primary-glow)"
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = "var(--primary-hover)"}
+                onMouseOut={(e) => e.currentTarget.style.background = "var(--primary)"}
+              >
+                <Download size={16} color="#ffffff" />
+                <span>{downloading ? "Downloading..." : "Download PDF Report"}</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Search Input Bar */}
       <div style={{
@@ -79,7 +225,7 @@ function TrackComplaint() {
         border: "1px solid var(--glass-border)",
         boxShadow: "var(--shadow-sm)",
         alignItems: "center"
-      }}>
+      }} className="no-print">
         <input
           type="text"
           placeholder="Enter Tracking ID (e.g. COMP-8A9F321B)"
@@ -154,19 +300,20 @@ function TrackComplaint() {
       {/* Complaint Log Card */}
       <AnimatePresence>
         {complaint && (
-          <motion.div 
-            style={{
-              background: "var(--glass-bg)",
-              border: "1px solid var(--glass-border)",
-              borderRadius: "var(--radius-lg)",
-              padding: "35px",
-              boxShadow: "var(--shadow-lg)"
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ type: "spring", stiffness: 70, damping: 15 }}
-          >
+          <>
+            <motion.div 
+              style={{
+                background: "var(--glass-bg)",
+                border: "1px solid var(--glass-border)",
+                borderRadius: "var(--radius-lg)",
+                padding: "35px",
+                boxShadow: "var(--shadow-lg)"
+              }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ type: "spring", stiffness: 70, damping: 15 }}
+            >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "20px" }}>
               <div>
                 <span style={{
@@ -306,6 +453,58 @@ function TrackComplaint() {
               <span>Last Session Update: {complaint.updatedAt ? new Date(complaint.updatedAt).toLocaleString() : new Date(complaint.createdAt).toLocaleString()}</span>
             </div>
           </motion.div>
+
+          {/* Case Timeline Section */}
+          <CaseTimeline complaint={complaint} timelineEntries={timeline} />
+
+          {/* Officer Notes Section */}
+          <div style={{
+            background: "var(--glass-bg)",
+            border: "1px solid var(--glass-border)",
+            borderRadius: "var(--radius-lg)",
+            padding: "30px",
+            boxShadow: "var(--shadow-md)",
+            marginTop: "30px"
+          }} className="print-section">
+            <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "var(--text-primary)", marginBottom: "15px" }}>
+              Officer Notes & Logs
+            </h3>
+            
+            {complaint.officerNotes && complaint.officerNotes.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                {complaint.officerNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    style={{
+                      background: "rgba(10, 10, 18, 0.4)",
+                      border: "1px solid var(--border-color)",
+                      padding: "16px 20px",
+                      borderRadius: "var(--radius-md)"
+                    }}
+                  >
+                    <p style={{ fontSize: "0.95rem", color: "var(--text-primary)", lineHeight: "1.5" }}>
+                      {note.note}
+                    </p>
+                    <div style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "10px",
+                      fontSize: "0.75rem",
+                      color: "var(--text-muted)"
+                    }}>
+                      <span>Logged by: {note.officerName || "Cyber Officer"}</span>
+                      <span>{new Date(note.createdAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", fontStyle: "italic" }}>
+                No officer notes logged on this case yet.
+              </p>
+            )}
+          </div>
+          </>
         )}
       </AnimatePresence>
     </motion.div>

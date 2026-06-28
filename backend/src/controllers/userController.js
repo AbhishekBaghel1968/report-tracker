@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { User, Complaint } = require('../models');
+const { User, Complaint, AuditLog } = require('../models');
 
 async function getProfile(req, res) {
   try {
@@ -41,6 +41,20 @@ async function updateProfile(req, res) {
     user.phone = phone;
     await user.save();
 
+    // Log update profile
+    try {
+      await AuditLog.create({
+        userId: user.id,
+        userName: user.name,
+        action: 'PROFILE_UPDATED',
+        details: `Updated account details: name=${user.name}, phone=${user.phone}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+      });
+    } catch (err) {
+      console.error('Failed to log profile update audit:', err);
+    }
+
+
     return res.status(200).json({
       id: user.id,
       name: user.name,
@@ -71,6 +85,20 @@ async function changePassword(req, res) {
 
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
+
+    // Log change password
+    try {
+      await AuditLog.create({
+        userId: user.id,
+        userName: user.name,
+        action: 'PASSWORD_CHANGED',
+        details: `Successfully changed credential passwords`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+      });
+    } catch (err) {
+      console.error('Failed to log password change audit:', err);
+    }
+
 
     return res.status(200).json({ message: 'Password changed successfully' });
   } catch (error) {

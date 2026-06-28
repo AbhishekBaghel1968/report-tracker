@@ -16,7 +16,10 @@ router.get('/user', citizenAuth, complaintController.getCitizenComplaints);
 router.get('/admin/stats', adminAuth, complaintController.getAdminStats);
 router.get('/', adminAuth, complaintController.getAllComplaints);
 
+const { authenticate } = require('../middleware/auth');
+
 // General ID routes
+router.get('/:id/timeline', authenticate, complaintController.getComplaintTimeline);
 router.get('/:id', adminAuth, complaintController.getComplaintById);
 router.put('/:id', adminAuth, complaintController.updateComplaintStatus);
 router.delete('/:id', adminAuth, complaintController.deleteComplaint);

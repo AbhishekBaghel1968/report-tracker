@@ -4,6 +4,9 @@ const EvidenceFile = require('./EvidenceFile');
 const OfficerNote = require('./OfficerNote');
 const EvidenceUpload = require('./EvidenceUpload');
 const Notification = require('./Notification');
+const AuditLog = require('./AuditLog');
+const ChatMessage = require('./ChatMessage');
+const ComplaintTimeline = require('./ComplaintTimeline');
 
 // Setup Associations
 User.hasMany(Complaint, {
@@ -83,6 +86,45 @@ Notification.belongsTo(User, {
   as: 'user',
 });
 
+// AuditLog associations (only needs belongsTo if we query logs with users)
+AuditLog.belongsTo(User, {
+  foreignKey: { name: 'userId', field: 'user_id', allowNull: true },
+  as: 'user',
+});
+
+// ChatMessage associations
+Complaint.hasMany(ChatMessage, {
+  foreignKey: { name: 'complaintId', field: 'complaint_id', allowNull: false },
+  as: 'chatMessages',
+  onDelete: 'CASCADE',
+});
+ChatMessage.belongsTo(Complaint, {
+  foreignKey: { name: 'complaintId', field: 'complaint_id', allowNull: false },
+  as: 'complaint',
+});
+User.hasMany(ChatMessage, {
+  foreignKey: { name: 'senderId', field: 'sender_id', allowNull: false },
+  as: 'chatMessages',
+  onDelete: 'CASCADE',
+});
+ChatMessage.belongsTo(User, {
+  foreignKey: { name: 'senderId', field: 'sender_id', allowNull: false },
+  as: 'sender',
+});
+
+// ComplaintTimeline associations
+Complaint.hasMany(ComplaintTimeline, {
+  foreignKey: { name: 'complaintId', field: 'complaint_id', allowNull: false },
+  sourceKey: 'complaintId',
+  as: 'timelineEntries',
+  onDelete: 'CASCADE',
+});
+ComplaintTimeline.belongsTo(Complaint, {
+  foreignKey: { name: 'complaintId', field: 'complaint_id', allowNull: false },
+  targetKey: 'complaintId',
+  as: 'complaint',
+});
+
 module.exports = {
   User,
   Complaint,
@@ -90,4 +132,7 @@ module.exports = {
   OfficerNote,
   EvidenceUpload,
   Notification,
+  AuditLog,
+  ChatMessage,
+  ComplaintTimeline,
 };

@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { User } = require('../models');
+const { User, AuditLog } = require('../models');
 const { generateToken } = require('../middleware/auth');
 
 async function register(req, res) {
@@ -24,10 +24,24 @@ async function register(req, res) {
       role: 'ROLE_CITIZEN',
     });
 
+    // Log registration to AuditLog
+    try {
+      await AuditLog.create({
+        userId: user.id,
+        userName: user.name,
+        action: 'USER_REGISTERED',
+        details: `Registered account: name=${user.name}, email=${user.email}, role=ROLE_CITIZEN`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+      });
+    } catch (err) {
+      console.error('Failed to log registration audit:', err);
+    }
+
     return res.status(200).json({
       message: 'User registered successfully',
       email: user.email,
     });
+
   } catch (error) {
     console.error('Registration error:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
@@ -58,6 +72,19 @@ async function login(req, res) {
 
     const token = generateToken(user.email, user.role, user.id);
 
+    // Log login to AuditLog
+    try {
+      await AuditLog.create({
+        userId: user.id,
+        userName: user.name,
+        action: 'USER_LOGIN',
+        details: `Established secure session: role=${user.role}`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+      });
+    } catch (err) {
+      console.error('Failed to log login audit:', err);
+    }
+
     return res.status(200).json({
       token,
       type: 'Bearer',
@@ -66,6 +93,7 @@ async function login(req, res) {
       email: user.email,
       role: user.role,
     });
+
   } catch (error) {
     console.error('Login error:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
